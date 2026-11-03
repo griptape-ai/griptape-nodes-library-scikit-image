@@ -111,7 +111,13 @@ The preview is drawn in the browser, so dragging a slider is instant. It uses th
 ## Install
 
 1. Run `gtn config show workspace_directory` to find your workspace directory.
-2. Clone this repository into it.
+2. Clone this repository into it:
+
+   ```bash
+   cd "$(gtn config show workspace_directory)"
+   git clone https://github.com/griptape-ai/griptape-nodes-library-scikit-image.git
+   ```
+
 3. In Griptape Nodes, open **Settings**, then **Libraries**, and add `griptape-nodes-library.json` from the clone.
 
 ## Development
