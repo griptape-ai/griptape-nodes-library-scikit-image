@@ -1,0 +1,132 @@
+{
+    "name": "Griptape Nodes scikit-image Library",
+    "library_schema_version": "0.14.0",
+    "metadata": {
+        "author": "Jason Schleifer",
+        "description": "Split images such as model sheets into pieces, and clean up, separate, trace, compare and animate drawings with scikit-image.",
+        "library_version": "0.1.0",
+        "engine_version": "0.104.0",
+        "tags": [
+            "Griptape",
+            "Image",
+            "scikit-image"
+        ],
+        "dependencies": {
+            "pip_dependencies": [
+                "numpy>=2.2,<3",
+                "scipy>=1.13,<2",
+                "scikit-image>=0.25,<1",
+                "pillow>=11"
+            ]
+        }
+    },
+    "widgets": [
+        {
+            "name": "BoilingLines",
+            "path": "griptape_nodes_library_scikit_image/widgets/BoilingLines/BoilingLines.js",
+            "description": "Live preview of the Boiling Lines wobble on your image, with a frame scrubber, a noise view and the settings."
+        }
+    ],
+    "categories": [
+        {
+            "image": {
+                "color": "border-pink-500",
+                "title": "Image",
+                "description": "Nodes for working with images",
+                "icon": "Image"
+            }
+        }
+    ],
+    "nodes": [
+        {
+            "class_name": "SplitImage",
+            "file_path": "griptape_nodes_library_scikit_image/split_image.py",
+            "metadata": {
+                "category": "image",
+                "description": "Split an image, such as a model sheet of poses on paper, into one image per piece.",
+                "display_name": "Split Image"
+            }
+        },
+        {
+            "class_name": "FlattenPaper",
+            "file_path": "griptape_nodes_library_scikit_image/flatten_paper.py",
+            "metadata": {
+                "category": "image",
+                "description": "Take the shadows and gradients out of a photo or scan so the paper is even and white.",
+                "display_name": "Flatten Paper"
+            }
+        },
+        {
+            "class_name": "LinesToAlpha",
+            "file_path": "griptape_nodes_library_scikit_image/lines_to_alpha.py",
+            "metadata": {
+                "category": "image",
+                "description": "Find the marks on paper and return just their alpha channel: white on a mark, black on paper.",
+                "display_name": "Lines to Alpha"
+            }
+        },
+        {
+            "class_name": "TrimToContent",
+            "file_path": "griptape_nodes_library_scikit_image/trim_to_content.py",
+            "metadata": {
+                "category": "image",
+                "description": "Crop an image to the box that holds its marks, plus padding.",
+                "display_name": "Trim to Content"
+            }
+        },
+        {
+            "class_name": "EqualizeContrast",
+            "file_path": "griptape_nodes_library_scikit_image/equalize_contrast.py",
+            "metadata": {
+                "category": "image",
+                "description": "Even out contrast across an image in small regions (CLAHE), on lightness only.",
+                "display_name": "Equalize Contrast"
+            }
+        },
+        {
+            "class_name": "AlignImages",
+            "file_path": "griptape_nodes_library_scikit_image/align_images.py",
+            "metadata": {
+                "category": "image",
+                "description": "Shift an image so it lines up with a reference, and report the shift in pixels.",
+                "display_name": "Align Images"
+            }
+        },
+        {
+            "class_name": "CompareImages",
+            "file_path": "griptape_nodes_library_scikit_image/compare_images.py",
+            "metadata": {
+                "category": "image",
+                "description": "Score how alike two images are (SSIM) and show where they differ.",
+                "display_name": "Compare Images"
+            }
+        },
+        {
+            "class_name": "LinesToSvg",
+            "file_path": "griptape_nodes_library_scikit_image/lines_to_svg.py",
+            "metadata": {
+                "category": "image",
+                "description": "Trace the outline of every mark in a drawing into an SVG file.",
+                "display_name": "Lines to SVG"
+            }
+        },
+        {
+            "class_name": "BoilingLines",
+            "file_path": "griptape_nodes_library_scikit_image/boiling_lines.py",
+            "metadata": {
+                "category": "image",
+                "description": "Make frames of one drawing, each wobbled a little differently, for hand-drawn boiling lines.",
+                "display_name": "Boiling Lines"
+            }
+        },
+        {
+            "class_name": "MakeInbetweens",
+            "file_path": "griptape_nodes_library_scikit_image/make_inbetweens.py",
+            "metadata": {
+                "category": "image",
+                "description": "Make frames that move from one drawing to the next by following the motion between them.",
+                "display_name": "Make In-Betweens"
+            }
+        }
+    ]
+}

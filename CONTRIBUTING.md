@@ -1,0 +1,123 @@
+# Contributing
+
+## Development Setup
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management. Install dev dependencies with:
+
+```bash
+make install/dev
+```
+
+To install all dependencies including core and extras:
+
+```bash
+make install
+```
+
+## Makefile Targets
+
+Run `make` with no arguments to see all available targets.
+
+### Checks
+
+Run all checks (format, lint, types) before submitting a PR:
+
+```bash
+make check
+```
+
+Individual checks:
+
+```bash
+make check/format   # ruff format --check
+make check/lint     # ruff check
+make check/types    # pyright
+make check/json     # validate JSON files with jq
+make check/changelog  # validate CHANGELOG.md and changelog.d entries
+```
+
+### Fixing Issues
+
+Auto-fix formatting and linting issues:
+
+```bash
+make fix
+```
+
+### Dependency Sync
+
+The `pip_dependencies` field in the library JSON is kept in sync with `pyproject.toml`. Run this after adding or removing dependencies:
+
+```bash
+make deps/sync
+```
+
+This is also run automatically as part of `make install/core` and `make install/all`.
+
+## Changelog
+
+[`CHANGELOG.md`](CHANGELOG.md) follows [Keep a Changelog 2.0.0](https://keepachangelog.com/en/2.0.0/), with one section per `library_version`.
+
+A PR with a user-facing change does not edit `CHANGELOG.md`. It adds one file to [`changelog.d/`](changelog.d/README.md), named `<type>-<slug>.md` for one of `added`, `changed`, `deprecated`, `removed`, `fixed`, or `security`. The whole file is the bullet, with no heading above it. One entry per file keeps PRs from conflicting. `make changelog` prints the `[Unreleased]` section with every entry file folded in.
+
+Write for the person updating the library: which node changed, what they will notice, and why. Link the GitHub issue on the entry's last line when there is one. Start breaking changes, anything that makes a saved workflow stop working or give a different result, with `**Breaking:**`. Refactors, tests, CI, and docs-only changes get no entry. The full style guide is in [CLAUDE.md](CLAUDE.md#changelog).
+
+`make check/changelog`, part of `make check` and CI, validates the structure of `CHANGELOG.md` and of every entry file. It never requires a PR to add an entry. That call stays with people.
+
+## CI
+
+The CI workflow runs `make check` on every pull request and push to `main`. PRs must pass all checks before merging.
+
+## Releases
+
+Library versions follow [semantic versioning](https://semver.org/). The version is stored in two places, which the version targets keep in sync: the library JSON file under `metadata.library_version`, and `pyproject.toml` under `project.version`. The library JSON is the source of truth — `make version/get` reads it.
+
+To check the current version:
+
+```bash
+make version/get
+```
+
+To set a specific version:
+
+```bash
+make version/set v=1.2.3
+```
+
+### Regular Release
+
+1. Merge your changes to `main`.
+
+2. Run **Actions > Version Bump (Patch)** or **Actions > Version Bump (Minor)** on `main`. This increments the version in the library JSON, folds the `changelog.d/` entries into a `CHANGELOG.md` section for the new version and deletes them, and commits both. It stops first if `CHANGELOG.md` or `changelog.d/` holds uncommitted changes, since the roll would overwrite them.
+
+   Or bump locally and push:
+
+   ```bash
+   make version/patch   # 1.2.3 → 1.2.4
+   make version/minor   # 1.2.3 → 1.3.0
+   make version/major   # 1.2.3 → 2.0.0
+   ```
+
+3. Run **Actions > Version Publish** on `main`. This creates and pushes the version tag (e.g. `v1.2.3`), updates the `stable` tag, and creates a GitHub release with auto-generated release notes.
+
+### Patch Release
+
+To release a fix without including all commits on `main`, use a release branch:
+
+1. Create a branch from the tag you want to patch:
+
+   ```bash
+   git checkout -b release/v0.50 v0.50.0
+   git push -u origin release/v0.50
+   ```
+
+2. Cherry-pick the fix commit(s) you want to include:
+
+   ```bash
+   git cherry-pick <commit-sha>
+   git push
+   ```
+
+3. Run **Actions > Version Bump (Patch)** and set the branch to `release/v0.50`.
+
+4. Run **Actions > Version Publish** and set the branch to `release/v0.50`.

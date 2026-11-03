@@ -1,0 +1,31 @@
+name: Version Bump (Patch)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # The bump rolls changelog.d into CHANGELOG.md with scripts/changelog.py.
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump patch version
+        run: make version/patch
+
+      - name: Push changes
+        run: git push
