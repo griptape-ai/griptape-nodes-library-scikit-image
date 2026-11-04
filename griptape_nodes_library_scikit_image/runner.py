@@ -209,8 +209,14 @@ def dashed_rectangle(draw: Any, region: Region, colour: tuple[int, int, int], wi
                 draw.line((left, top + start, left, top + end), fill=colour, width=width)
 
 
-def hatch_regions(image: Any, regions: list[Region], step: int, width: int) -> Any:
-    """The image with red cross-hatching and a light red tint inside each region, so it is clear they are not used."""
+def hatch_regions(
+    image: Any, regions: list[Region], step: int, width: int, keep_clear: list[Region] | None = None
+) -> Any:
+    """The image with red cross-hatching and a light red tint inside each region, so it is clear they are not used.
+
+    Anything in `keep_clear` is left as it is, even where it lies inside a region. A big dropped region, such as a whole
+    page edge, can have the pieces that are kept inside it, and those must not be hatched over.
+    """
     import PIL.Image
     import PIL.ImageDraw
 
@@ -222,13 +228,13 @@ def hatch_regions(image: Any, regions: list[Region], step: int, width: int) -> A
         drawing.line((offset + size[1], 0, offset, size[1]), fill=HATCH_COLOUR, width=width)
     mask = PIL.Image.new("L", size, 0)
     masking = PIL.ImageDraw.Draw(mask)
-    tint = PIL.Image.new("RGBA", size, (0, 0, 0, 0))
-    tinting = PIL.ImageDraw.Draw(tint)
     for region in regions:
         masking.rectangle((region.left, region.top, region.right, region.bottom), fill=255)
-        tinting.rectangle((region.left, region.top, region.right, region.bottom), fill=DROPPED_TINT)
+    for region in keep_clear or []:
+        masking.rectangle((region.left, region.top, region.right, region.bottom), fill=0)
+    covering = PIL.Image.alpha_composite(PIL.Image.new("RGBA", size, DROPPED_TINT), lines)
     clear = PIL.Image.new("RGBA", size, (0, 0, 0, 0))
-    layer = PIL.Image.alpha_composite(tint, PIL.Image.composite(lines, clear, mask))
+    layer = PIL.Image.composite(covering, clear, mask)
     return PIL.Image.alpha_composite(image.convert("RGBA"), layer).convert("RGB")
 
 
@@ -245,15 +251,15 @@ def draw_preview(image: Any, kept: list[Region], dropped: list[Region], padding:
     preview = image.convert("RGB")
     longer = max(preview.size)
     line = max(2, longer // 300)
+    crops = [padded(region, padding, *preview.size) for region in kept]
     if dropped:
-        preview = hatch_regions(preview, dropped, step=max(10, line * 5), width=max(1, line // 2))
+        preview = hatch_regions(preview, dropped, step=max(10, line * 5), width=max(1, line // 2), keep_clear=crops)
     draw = PIL.ImageDraw.Draw(preview)
     font = PIL.ImageFont.load_default(size=max(14, longer // 40))
     for region in dropped:
         draw.rectangle((region.left, region.top, region.right, region.bottom), outline=DROPPED_COLOUR, width=line)
-    for index, region in enumerate(kept):
+    for index, (region, crop) in enumerate(zip(kept, crops, strict=True)):
         colour = piece_colour(index)
-        crop = padded(region, padding, *preview.size)
         if padding:
             dashed_rectangle(draw, crop, colour, line, dash=max(6, line * 4))
         draw.rectangle((region.left, region.top, region.right, region.bottom), outline=colour, width=line)

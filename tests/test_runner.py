@@ -97,3 +97,17 @@ def test_a_dropped_piece_is_cross_hatched():
     assert len(changed) > len(inside) // 20
     untouched = [(x, y) for x in range(5, 30) for y in range(5, 30)]
     assert all(preview.getpixel(point) == image.convert("RGB").getpixel(point) for point in untouched)
+
+
+def test_a_kept_piece_inside_a_dropped_region_is_not_hatched_over():
+    image = sheet().convert("RGB")
+    dropped = [runner.Region(0, 0, 590, 390)]  # a big dropped region, such as a whole page edge
+    kept = [runner.Region(60, 50, 140, 130)]
+    preview = runner.draw_preview(image, kept, dropped, padding=6)
+    # away from the piece's outline and its number label in the top left corner
+    inside = [(x, y) for x in range(80, 136) for y in range(70, 126)]
+    untouched = [point for point in inside if preview.getpixel(point) == image.getpixel(point)]
+    assert len(untouched) == len(inside)  # the piece keeps its own pixels
+    outside = [(x, y) for x in range(200, 500) for y in range(150, 340)]
+    hatched = [point for point in outside if preview.getpixel(point) != image.getpixel(point)]
+    assert len(hatched) > len(outside) // 20  # and the rest of the dropped region is still hatched
