@@ -67,13 +67,13 @@ def test_aligning_recovers_a_known_shift():
 
 
 def test_comparing_an_image_with_itself_scores_one_and_shows_no_difference():
-    score, difference = tools.compare_images(drawing(), drawing(), 3.0)
+    score, difference = tools.compare_view(drawing(), drawing(), "Difference", 3.0, 50.0)
     assert score == pytest.approx(1.0)
     assert np.asarray(difference).max() == 0
 
 
 def test_comparing_different_images_scores_lower():
-    score, difference = tools.compare_images(drawing(), tools.flatten_paper(drawing(), 1.0), 3.0)
+    score, difference = tools.compare_view(drawing(), tools.flatten_paper(drawing(), 1.0), "Difference", 3.0, 50.0)
     assert score < 0.99
     assert np.asarray(difference).max() > 0
 

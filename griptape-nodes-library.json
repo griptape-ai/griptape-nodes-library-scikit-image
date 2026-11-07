@@ -32,8 +32,8 @@
             "description": "The traced shapes of Lines to SVG on your image, in the node's fill colour, before you run the node."
         },
         {
-            "name": "CompareImages",
-            "path": "griptape_nodes_library_scikit_image/widgets/CompareImages/CompareImages.js",
+            "name": "DiffImages",
+            "path": "griptape_nodes_library_scikit_image/widgets/DiffImages/DiffImages.js",
             "description": "Two images to wipe between, flip between, or see where they differ, with the gain applied live."
         },
         {
@@ -108,12 +108,19 @@
             }
         },
         {
-            "class_name": "CompareImages",
-            "file_path": "griptape_nodes_library_scikit_image/compare_images.py",
+            "class_name": "DiffImages",
+            "file_path": "griptape_nodes_library_scikit_image/diff_images.py",
             "metadata": {
                 "category": "image",
                 "description": "Score how alike two images are (SSIM) and show where they differ.",
-                "display_name": "Compare Images"
+                "display_name": "Diff Images",
+                "tags": [
+                    "compare",
+                    "diff",
+                    "difference",
+                    "similarity",
+                    "ssim"
+                ]
             }
         },
         {

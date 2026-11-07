@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import StrEnum
 
 BACKGROUND_PAPER = "paper"
 BACKGROUND_TRANSPARENT = "transparent"
@@ -10,6 +11,17 @@ BACKGROUND_CHOICES = [BACKGROUND_PAPER, BACKGROUND_TRANSPARENT]
 
 PADDING_CHOICES = ["1", "2", "3", "4", "5", "6", "7", "8"]
 DEFAULT_PADDING_DIGITS = 4
+
+
+class CompareView(StrEnum):
+    """What Diff Images shows in its widget, and saves as its output."""
+
+    WIPE = "Wipe"
+    A = "A"
+    B = "B"
+    DIFFERENCE = "Difference"
+    HEAT = "Heat"
+
 
 MAX_PIECES = 50
 MAX_BOIL_FRAMES = 96

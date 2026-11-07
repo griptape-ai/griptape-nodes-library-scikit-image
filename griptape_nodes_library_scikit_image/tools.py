@@ -8,10 +8,12 @@ from __future__ import annotations
 from typing import Any
 
 from griptape_nodes_library_scikit_image.runner import estimate_background, find_marks
-from griptape_nodes_library_scikit_image.splitting import Region, padded
+from griptape_nodes_library_scikit_image.splitting import CompareView, Region, padded
 
 WORK_SIZE = 900
 SVG_WORK_SIZE = 1600
+HEAT_COLOUR = (255, 60, 60)  # the Heat view of Diff Images, as in widgets/DiffImages
+HEAT_ALPHA = 0.85
 FLOW_SIZE = 512
 MAX_SVG_POINTS = 400_000
 ALIGN_SIZE = 512
@@ -288,12 +290,37 @@ def dissimilarity(image: Any, other: Any, longest: int | None = None) -> tuple[f
     return float(outputs[0]), 1 - np.asarray(outputs[-1]).mean(axis=-1)
 
 
-def compare_images(image: Any, other: Any, gain: float) -> tuple[float, Any]:
-    """How alike two images are, 1 for the same, and a picture of where they differ, white where they do."""
+def compare_view(image: Any, other: Any, view: str, gain: float, wipe: float) -> tuple[float, Any]:
+    """How alike two images are, 1 for the same, and the picture the Compare widget shows for `view`.
+
+    Wipe is the first image up to `wipe` percent of the width and the second after it. A and B are the images, the
+    second resized to the first. Difference is white where they differ, and Heat tints the first image red there.
+    The widget's JavaScript draws the same views from the preview, so what is saved is what it showed.
+    """
     import numpy as np
+    import PIL.Image
 
     score, difference = dissimilarity(image, other)
-    return score, to_image(np.repeat(np.clip(difference * gain, 0, 1)[..., None], 3, axis=-1))
+    level = np.clip(difference * gain, 0, 1)[..., None]
+    first = rgb_array(image)
+    match view:
+        case CompareView.DIFFERENCE:
+            result = np.repeat(level, 3, axis=-1)
+        case CompareView.HEAT:
+            result = first * (1 - level * HEAT_ALPHA) + np.array(HEAT_COLOUR) / 255 * level * HEAT_ALPHA
+        case CompareView.A:
+            result = first
+        case CompareView.B:
+            result = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
+        case CompareView.WIPE:
+            result = first.copy()
+            second = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
+            cut = round(image.width * min(max(wipe, 0), 100) / 100)
+            result[:, cut:] = second[:, cut:]
+        case _:
+            msg = f"Unknown view: {view!r}"
+            raise ValueError(msg)
+    return score, to_image(result)
 
 
 def compare_preview(image: Any, other: Any, longest: int) -> tuple[float, Any]:

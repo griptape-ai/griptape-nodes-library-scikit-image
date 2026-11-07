@@ -1,4 +1,4 @@
-"""Compare Images: score how alike two images are and show where they differ."""
+"""Diff Images: score how alike two images are and show where they differ."""
 
 from __future__ import annotations
 
@@ -10,22 +10,25 @@ from typing import Any
 from griptape_nodes.exe_types.core_types import Parameter, ParameterMode
 from griptape_nodes.exe_types.param_types.parameter_dict import ParameterDict
 from griptape_nodes.exe_types.param_types.parameter_float import ParameterFloat
+from griptape_nodes.exe_types.param_types.parameter_string import ParameterString
+from griptape_nodes.traits.options import Options
 from griptape_nodes.traits.widget import Widget
 
 from griptape_nodes_library_scikit_image import tools
 from griptape_nodes_library_scikit_image.node_base import ImageNode, browser_url, image_location, open_image
 from griptape_nodes_library_scikit_image.params import float_parameter, int_parameter
+from griptape_nodes_library_scikit_image.splitting import CompareView
 
-__all__ = ["CompareImages"]
+__all__ = ["DiffImages"]
 
 logger = logging.getLogger("griptape_nodes")
 
 LIBRARY_NAME = "Griptape Nodes scikit-image Library"
-WIDGET_NAME = "CompareImages"
-EDITOR = "compare_editor"
-# The gain only changes how the widget draws the differences. The preview size changes what is compared, so Python
-# compares again when it is released.
-SYNCED_PARAMETERS = ["gain", "preview_size"]
+WIDGET_NAME = "DiffImages"
+EDITOR = "diff_editor"
+# The gain, view and wipe position only change how the widget draws what it has, and they are what the node saves. The
+# preview size changes what is compared, so Python compares again when it is released.
+SYNCED_PARAMETERS = ["gain", "preview_size", "view", "wipe"]
 COMPARE_PARAMETERS = {"image", "other", "preview_size"}
 DEFAULT_PREVIEW_SIZE = 1024
 MIN_PREVIEW_SIZE = 64
@@ -36,16 +39,16 @@ def default_widget_value() -> dict[str, Any]:
     return {"image_url": "", "other_url": "", "width": 0, "height": 0, "map_url": "", "score": None, "message": ""}
 
 
-class CompareImages(ImageNode):
+class DiffImages(ImageNode):
     """Measure the structural similarity (SSIM) of two images.
 
     Use it to check how far a generated character drifted from its sketch, or how much changed between two versions of a
     page. The widget lets you wipe between the images, flip between them, and see where they differ, before you run the
-    node.
+    node. The node saves the view the widget is showing.
     """
 
     INPUT_TOOLTIP = "The first image."
-    OUTPUT_FILENAME = "difference.png"
+    OUTPUT_FILENAME = "compare.png"
 
     def add_settings(self) -> None:
         self.add_image_input("other", "The image to compare with. It is resized to the size of the first.")
@@ -59,8 +62,32 @@ class CompareImages(ImageNode):
                 ),
                 allowed_modes={ParameterMode.PROPERTY},
                 traits={Widget(name=WIDGET_NAME, library=LIBRARY_NAME, synced_parameters=SYNCED_PARAMETERS)},
-                ui_options={"display_name": "Compare"},
+                ui_options={"display_name": "Diff"},
                 serializable=False,
+            )
+        )
+        self.add_parameter(
+            ParameterString(
+                name="view",
+                default_value=CompareView.DIFFERENCE,
+                tooltip=(
+                    "What the widget shows, and what the node saves. Wipe splits the images at the wipe position. A and B "
+                    "are the images. Difference is white where they differ. Heat tints the first image red where they "
+                    "differ."
+                ),
+                allowed_modes={ParameterMode.PROPERTY},
+                traits={Options(choices=[view.value for view in CompareView])},
+            )
+        )
+        self.add_parameter(
+            float_parameter(
+                "wipe",
+                50.0,
+                "Where the Wipe view splits the images, as a percentage of the width. The first image is on the left.",
+                0.0,
+                100.0,
+                0.5,
+                slider=True,
             )
         )
         self.add_parameter(
@@ -96,7 +123,10 @@ class CompareImages(ImageNode):
                 allowed_modes={ParameterMode.OUTPUT},
             )
         )
-        self.add_image_output("output", "Where the images differ, white where they differ most.", self.OUTPUT_FILENAME)
+        self.add_image_output(
+            "output", "The view the widget is showing, at the full size of the first image.", self.OUTPUT_FILENAME
+        )
+        self._show_wipe_only_for_wipe()
 
     def set_parameter_value(
         self,
@@ -117,11 +147,20 @@ class CompareImages(ImageNode):
         )
         if initial_setup and param_name in COMPARE_PARAMETERS:
             self._update_widget()
+        if initial_setup and param_name == "view":
+            self._show_wipe_only_for_wipe()
 
     def after_value_set(self, parameter: Parameter, value: Any) -> None:
         if parameter.name in COMPARE_PARAMETERS:
             self._update_widget()
+        if parameter.name == "view":
+            self._show_wipe_only_for_wipe()
         return super().after_value_set(parameter, value)
+
+    def _show_wipe_only_for_wipe(self) -> None:
+        wipe = self.get_parameter_by_name("wipe")
+        if wipe is not None:
+            wipe.hide = self.get_parameter_value("view") != CompareView.WIPE
 
     def _update_widget(self) -> None:
         """Compare the two images at the preview size and hand the widget both of them and the map of differences.
@@ -152,6 +191,12 @@ class CompareImages(ImageNode):
 
     def run(self, image: Any) -> None:
         other = self.load_input("other", "Other")
-        score, difference = tools.compare_images(image, other, float(self.get_parameter_value("gain") or 3.0))
-        self.publish("output", difference)
+        score, shown = tools.compare_view(
+            image,
+            other,
+            str(self.get_parameter_value("view") or CompareView.DIFFERENCE),
+            float(self.get_parameter_value("gain") or 3.0),
+            float(self.get_parameter_value("wipe") if self.get_parameter_value("wipe") is not None else 50.0),
+        )
+        self.publish("output", shown)
         self.parameter_output_values["similarity"] = score
