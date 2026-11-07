@@ -28,7 +28,7 @@ WIDGET_NAME = "DiffImages"
 EDITOR = "diff_editor"
 # The gain, view and wipe position only change how the widget draws what it has, and they are what the node saves. The
 # preview size changes what is compared, so Python compares again when it is released.
-SYNCED_PARAMETERS = ["gain", "preview_size", "view", "wipe"]
+SYNCED_PARAMETERS = ["gain", "preview_size", "view", "wipe", "heat_colours"]
 COMPARE_PARAMETERS = {"image", "other", "preview_size"}
 DEFAULT_PREVIEW_SIZE = 1024
 MIN_PREVIEW_SIZE = 64
@@ -36,7 +36,20 @@ MIN_PREVIEW_SIZE = 64
 
 def default_widget_value() -> dict[str, Any]:
     """The widget's value: both images to show, their size, and the map of where they differ."""
-    return {"image_url": "", "other_url": "", "width": 0, "height": 0, "map_url": "", "score": None, "message": ""}
+    return {
+        "image_url": "",
+        "other_url": "",
+        "width": 0,
+        "height": 0,
+        "map_url": "",
+        "score": None,
+        "message": "",
+        "palettes": {
+            name: [[position, list(colour)] for position, colour in stops]
+            for name, stops in tools.HEAT_PALETTES.items()
+        },
+        "heat_alpha": tools.HEAT_ALPHA,
+    }
 
 
 class DiffImages(ImageNode):
@@ -91,6 +104,18 @@ class DiffImages(ImageNode):
             )
         )
         self.add_parameter(
+            ParameterString(
+                name="heat_colours",
+                default_value=tools.DEFAULT_HEAT_PALETTE,
+                tooltip=(
+                    "The colours of the Heat view. Spectrum runs from blue through green and yellow to red where the "
+                    "images differ most. Fire runs from yellow through orange to red. Red is a single colour."
+                ),
+                allowed_modes={ParameterMode.PROPERTY},
+                traits={Options(choices=list(tools.HEAT_PALETTES))},
+            )
+        )
+        self.add_parameter(
             float_parameter(
                 "gain",
                 3.0,
@@ -126,7 +151,7 @@ class DiffImages(ImageNode):
         self.add_image_output(
             "output", "The view the widget is showing, at the full size of the first image.", self.OUTPUT_FILENAME
         )
-        self._show_wipe_only_for_wipe()
+        self._show_settings_for_view()
 
     def set_parameter_value(
         self,
@@ -148,19 +173,22 @@ class DiffImages(ImageNode):
         if initial_setup and param_name in COMPARE_PARAMETERS:
             self._update_widget()
         if initial_setup and param_name == "view":
-            self._show_wipe_only_for_wipe()
+            self._show_settings_for_view()
 
     def after_value_set(self, parameter: Parameter, value: Any) -> None:
         if parameter.name in COMPARE_PARAMETERS:
             self._update_widget()
         if parameter.name == "view":
-            self._show_wipe_only_for_wipe()
+            self._show_settings_for_view()
         return super().after_value_set(parameter, value)
 
-    def _show_wipe_only_for_wipe(self) -> None:
-        wipe = self.get_parameter_by_name("wipe")
-        if wipe is not None:
-            wipe.hide = self.get_parameter_value("view") != CompareView.WIPE
+    def _show_settings_for_view(self) -> None:
+        """Show the wipe position only for Wipe, and the heat colours only for Heat."""
+        view = self.get_parameter_value("view")
+        for name, shown_for in (("wipe", CompareView.WIPE), ("heat_colours", CompareView.HEAT)):
+            parameter = self.get_parameter_by_name(name)
+            if parameter is not None:
+                parameter.hide = view != shown_for
 
     def _update_widget(self) -> None:
         """Compare the two images at the preview size and hand the widget both of them and the map of differences.
@@ -197,6 +225,7 @@ class DiffImages(ImageNode):
             str(self.get_parameter_value("view") or CompareView.DIFFERENCE),
             float(self.get_parameter_value("gain") or 3.0),
             float(self.get_parameter_value("wipe") if self.get_parameter_value("wipe") is not None else 50.0),
+            str(self.get_parameter_value("heat_colours") or tools.DEFAULT_HEAT_PALETTE),
         )
         self.publish("output", shown)
         self.parameter_output_values["similarity"] = score

@@ -9,13 +9,14 @@
 // stretched to), map_url, score and message.
 //
 // The views are the same as tools.compare_view in Python: Wipe is the first image left of the divider and the second
-// right of it, A and B are the images, Difference draws the map, and Heat tints the first image red where they differ.
+// right of it, A and B are the images, Difference draws the map, and Heat tints the first image where they differ, in
+// the colours of the heat_colours palette. Python sends the palettes (value.palettes) and the tint's strength.
 
 const STYLE_ID = "diff-images-styles";
-const DEFAULTS = { view: "Difference", wipe: 50, gain: 3 };
+import { rampLookup } from "./_ramps.js";
+
+const DEFAULTS = { view: "Difference", wipe: 50, gain: 3, heat_colours: "Spectrum" };
 const VIEWS = ["Wipe", "A", "B", "Difference", "Heat"];
-const HEAT = [255, 60, 60]; // as tools.HEAT_COLOUR and HEAT_ALPHA
-const HEAT_ALPHA = 0.85;
 
 function injectStyles() {
   let el = document.getElementById(STYLE_ID);
@@ -151,7 +152,8 @@ export default function DiffImages(container, props) {
   // The map with the gain applied, as a canvas the size of the map: gray for Difference, red with alpha for Heat.
   function tinted(view) {
     const gain = Number(setting("gain")) || DEFAULTS.gain;
-    const key = `${view}|${gain}|${map.url}`;
+    const palette = view === "Heat" ? String(setting("heat_colours")) : "";
+    const key = `${view}|${gain}|${palette}|${map.url}`;
     if (tint && key === tintKey) return tint;
     const layer = element("canvas");
     layer.width = map.width;
@@ -159,14 +161,18 @@ export default function DiffImages(container, props) {
     const context = layer.getContext("2d");
     const picture = context.createImageData(map.width, map.height);
     const pixels = picture.data;
+    const palettes = value.palettes || {};
+    const colours = rampLookup(palettes[palette] || palettes[DEFAULTS.heat_colours] || []);
+    const strength = Number(value.heat_alpha) || 0.85;
     for (let i = 0; i < map.gray.length; i++) {
       const level = Math.min(1, (map.gray[i] / 255) * gain);
       const o = i * 4;
       if (view === "Heat") {
-        pixels[o] = HEAT[0];
-        pixels[o + 1] = HEAT[1];
-        pixels[o + 2] = HEAT[2];
-        pixels[o + 3] = level * HEAT_ALPHA * 255;
+        const at = Math.round(level * (colours.length / 3 - 1)) * 3;
+        pixels[o] = colours[at];
+        pixels[o + 1] = colours[at + 1];
+        pixels[o + 2] = colours[at + 2];
+        pixels[o + 3] = level * strength * 255;
       } else {
         pixels[o] = pixels[o + 1] = pixels[o + 2] = level * 255;
         pixels[o + 3] = 255;

@@ -2,6 +2,10 @@
 
 import base64
 import io
+import json
+import shutil
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +16,8 @@ import PIL.Image  # noqa: E402
 from griptape_nodes.traits.widget import Widget  # noqa: E402
 
 from griptape_nodes_library_scikit_image import diff_images, tools  # noqa: E402
+
+WIDGET_DIR = Path(__file__).parent.parent / "griptape_nodes_library_scikit_image" / "widgets" / "DiffImages"
 
 
 def picture(shift: int = 0):
@@ -126,7 +132,6 @@ def test_a_run_saves_the_view_the_widget_shows(node, view):
         case "Heat":
             changed = (shown != first).any(axis=-1)
             assert changed.any() and not changed.all()  # tinted where they differ, untouched elsewhere
-            assert (shown[changed][:, 0] >= first[changed][:, 0]).all()  # towards red
     assert node.parameter_output_values["similarity"] < 1
 
 
@@ -160,3 +165,52 @@ def test_every_wipe_position_the_widget_can_send_is_accepted(node):
 def test_the_gain_accepts_a_value_between_the_old_half_steps(node, gain):
     node.set_parameter_value("gain", gain)
     assert node.get_parameter_value("gain") == gain
+
+
+def test_the_red_palette_tints_towards_red_and_the_spectrum_uses_more_than_one_colour():
+    _, red = tools.compare_view(picture(), picture(shift=40), "Heat", 8.0, 50.0, "Red")
+    _, spectrum = tools.compare_view(picture(), picture(shift=40), "Heat", 8.0, 50.0, "Spectrum")
+    first = np.asarray(picture()).astype(int)
+    changed = (np.asarray(red).astype(int) != first).any(axis=-1)
+    assert (np.asarray(red).astype(int)[changed][:, 0] >= first[changed][:, 0]).all()
+    tinted = np.asarray(spectrum).astype(int)[changed] - first[changed]
+    assert len({tuple(np.sign(row)) for row in tinted}) > 1  # not every pixel is pushed the same way
+
+
+def test_the_widget_gets_the_palettes_and_the_tint_strength(node):
+    data = node.get_parameter_value(diff_images.EDITOR)
+    assert set(data["palettes"]) == set(tools.HEAT_PALETTES)
+    assert data["palettes"]["Spectrum"][0] == [0.0, [40, 60, 200]]
+    assert data["heat_alpha"] == tools.HEAT_ALPHA
+
+
+def test_the_heat_colours_are_synced_and_shown_only_for_the_heat_view(node):
+    assert "heat_colours" in diff_images.SYNCED_PARAMETERS
+    colours = node.get_parameter_by_name("heat_colours")
+    assert node.get_parameter_value("heat_colours") == "Spectrum"
+    assert colours.hide is True
+    node.set_parameter_value("view", "Heat")
+    assert colours.hide is False
+    node.set_parameter_value("view", "Wipe")
+    assert colours.hide is True
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node.js is needed to run the widget's JavaScript.")
+@pytest.mark.parametrize("palette", list(tools.HEAT_PALETTES))
+def test_the_widget_colours_a_level_as_the_node_does(palette):
+    levels = [0.0, 0.07, 0.25, 0.4, 0.5, 0.62, 0.75, 0.83, 0.9, 0.97, 1.0]
+    script = """
+import { rampColour } from "%s";
+const input = JSON.parse(process.argv[1]);
+console.log(JSON.stringify(input.levels.map((level) => rampColour(input.stops, level))));
+""" % (WIDGET_DIR / "_ramps.js")
+    stops = [[position, list(colour)] for position, colour in tools.HEAT_PALETTES[palette]]
+    done = subprocess.run(
+        ["node", "--input-type=module", "-e", script, json.dumps({"stops": stops, "levels": levels})],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    from_javascript = np.array(json.loads(done.stdout))
+    from_python = tools.heat_colours(np.array(levels), palette) * 255
+    assert np.abs(from_javascript - from_python).max() < 1e-6

@@ -12,7 +12,21 @@ from griptape_nodes_library_scikit_image.splitting import CompareView, Region, p
 
 WORK_SIZE = 900
 SVG_WORK_SIZE = 1600
-HEAT_COLOUR = (255, 60, 60)  # the Heat view of Diff Images, as in widgets/DiffImages
+# The Heat view of Diff Images tints the first image with a colour that follows how much the images differ. Each palette
+# is a ramp of (position from 0 to 1, colour) stops. The widget gets them from Python, so it draws the same colours.
+HEAT_PALETTES: dict[str, list[tuple[float, tuple[int, int, int]]]] = {
+    "Spectrum": [
+        (0.0, (40, 60, 200)),
+        (0.25, (30, 170, 220)),
+        (0.5, (60, 200, 90)),
+        (0.75, (250, 220, 40)),
+        (0.9, (250, 130, 30)),
+        (1.0, (230, 30, 30)),
+    ],
+    "Fire": [(0.0, (255, 240, 120)), (0.5, (255, 150, 30)), (1.0, (200, 20, 20))],
+    "Red": [(0.0, (255, 60, 60)), (1.0, (255, 60, 60))],
+}
+DEFAULT_HEAT_PALETTE = "Spectrum"
 HEAT_ALPHA = 0.85
 FLOW_SIZE = 512
 MAX_SVG_POINTS = 400_000
@@ -290,12 +304,25 @@ def dissimilarity(image: Any, other: Any, longest: int | None = None) -> tuple[f
     return float(outputs[0]), 1 - np.asarray(outputs[-1]).mean(axis=-1)
 
 
-def compare_view(image: Any, other: Any, view: str, gain: float, wipe: float) -> tuple[float, Any]:
+def heat_colours(level: Any, palette: str) -> Any:
+    """The colour of the palette at each level from 0 to 1, as an array in 0..1 with a colour channel added."""
+    import numpy as np
+
+    stops = HEAT_PALETTES.get(palette, HEAT_PALETTES[DEFAULT_HEAT_PALETTE])
+    positions = [position for position, _ in stops]
+    channels = [np.interp(level, positions, [colour[c] / 255 for _, colour in stops]) for c in range(3)]
+    return np.stack(channels, axis=-1)
+
+
+def compare_view(
+    image: Any, other: Any, view: str, gain: float, wipe: float, palette: str = DEFAULT_HEAT_PALETTE
+) -> tuple[float, Any]:
     """How alike two images are, 1 for the same, and the picture the Compare widget shows for `view`.
 
     Wipe is the first image up to `wipe` percent of the width and the second after it. A and B are the images, the
-    second resized to the first. Difference is white where they differ, and Heat tints the first image red there.
-    The widget's JavaScript draws the same views from the preview, so what is saved is what it showed.
+    second resized to the first. Difference is white where they differ, and Heat tints the first image there, in the
+    colours of `palette`. The widget's JavaScript draws the same views from the preview, so what is saved is what it
+    showed.
     """
     import numpy as np
     import PIL.Image
@@ -307,7 +334,8 @@ def compare_view(image: Any, other: Any, view: str, gain: float, wipe: float) ->
         case CompareView.DIFFERENCE:
             result = np.repeat(level, 3, axis=-1)
         case CompareView.HEAT:
-            result = first * (1 - level * HEAT_ALPHA) + np.array(HEAT_COLOUR) / 255 * level * HEAT_ALPHA
+            alpha = level * HEAT_ALPHA
+            result = first * (1 - alpha) + heat_colours(level[..., 0], palette) * alpha
         case CompareView.A:
             result = first
         case CompareView.B:
