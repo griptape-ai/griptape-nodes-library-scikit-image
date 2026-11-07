@@ -6,12 +6,13 @@ import pathlib
 from unittest import mock
 
 import pytest
+from griptape_nodes.files.directory import DirectoryDestination
 from griptape_nodes.retained_mode.events.os_events import ExistingFilePolicy
 
 from griptape_nodes_library_scikit_image.params import build_output_directory
 
 
-def build(value: object) -> tuple[object, mock.Mock]:
+def build(value: object) -> tuple[DirectoryDestination, mock.Mock]:
     node = mock.Mock()
     node.get_parameter_value.return_value = value
     param = mock.Mock()
