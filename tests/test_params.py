@@ -37,6 +37,13 @@ class TestBuildOutputDirectory:
 
         assert destination is param.build_directory.return_value
 
+    def test_unresolvable_home_folder_raises(self) -> None:
+        with (
+            mock.patch.object(pathlib.Path, "expanduser", side_effect=RuntimeError("no home")),
+            pytest.raises(ValueError, match="home folder"),
+        ):
+            build("~/pieces")
+
     def test_absolute_path_is_used_as_given(self, tmp_path: pathlib.Path) -> None:
         destination, param = build(str(tmp_path / "pieces"))
 
