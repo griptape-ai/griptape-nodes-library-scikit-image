@@ -23,6 +23,7 @@ from griptape_nodes.retained_mode.events.os_events import ScanSequencesRequest, 
 from griptape_nodes.retained_mode.griptape_nodes import GriptapeNodes
 from griptape_nodes.traits.options import Options
 
+from griptape_nodes_library_scikit_image.params import build_output_directory
 from griptape_nodes_library_scikit_image.splitting import (
     BACKGROUND_CHOICES,
     BACKGROUND_PAPER,
@@ -354,7 +355,7 @@ class SplitImage(SuccessFailureNode):
             )
             raise NodeError(msg)
 
-        directory = self._output_dir.build_directory().create()
+        directory = build_output_directory(self, self._output_dir, "output_dir").create()
         folder = directory.resolve()
         folder.mkdir(parents=True, exist_ok=True)
         pieces = []

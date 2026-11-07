@@ -22,7 +22,7 @@ from griptape_nodes.retained_mode.griptape_nodes import GriptapeNodes
 from griptape_nodes.traits.options import Options
 
 from griptape_nodes_library_scikit_image import tools
-from griptape_nodes_library_scikit_image.params import bool_parameter
+from griptape_nodes_library_scikit_image.params import bool_parameter, build_output_directory
 from griptape_nodes_library_scikit_image.splitting import (
     DEFAULT_PADDING_DIGITS,
     PADDING_CHOICES,
@@ -293,7 +293,7 @@ class FramesNode(SuccessFailureNode):
         if self.get_parameter_value("even_size"):
             frames = [tools.make_even(frame) for frame in frames]
 
-        directory = self._output_dir.build_directory().create()
+        directory = build_output_directory(self, self._output_dir, "output_dir").create()
         folder = directory.resolve()
         folder.mkdir(parents=True, exist_ok=True)
         artifacts = []
