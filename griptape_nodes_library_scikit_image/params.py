@@ -11,6 +11,7 @@ from griptape_nodes.exe_types.param_types.parameter_bool import ParameterBool
 from griptape_nodes.exe_types.param_types.parameter_float import ParameterFloat
 from griptape_nodes.exe_types.param_types.parameter_int import ParameterInt
 from griptape_nodes.exe_types.param_types.parameter_string import ParameterString
+from griptape_nodes.files import path_utils
 from griptape_nodes.files.directory import DirectoryDestination
 from griptape_nodes.retained_mode.events.os_events import ExistingFilePolicy
 from griptape_nodes.traits.color_picker import ColorPicker
@@ -58,18 +59,58 @@ def colour_parameter(name: str, default: str, tooltip: str) -> ParameterString:
     )
 
 
+# TODO: remove build_output_directory and _explicit_directory_path once ProjectDirectoryParameter.build_directory()
+# uses absolute paths as given. The engine fix is https://github.com/griptape-ai/griptape-nodes-engine/pull/6246, and
+# the logic below is copied from it.
 def build_output_directory(node: BaseNode, param: ProjectDirectoryParameter, name: str) -> DirectoryDestination:
     """The destination for an output directory parameter.
 
     A plain name goes through the project's output situation, which nests it under the outputs directory and
-    versions it. An absolute path is the directory the user asked for, so it is used as given.
-
-    Stopgap: this belongs in the engine's ProjectDirectoryParameter, the way ProjectFileDestination already treats an
-    absolute filename. Remove this helper once the engine does it.
+    versions it. An absolute path, `~` path, or `file://` address is the directory the user asked for, so it is used
+    as given and not versioned.
     """
     value = node.get_parameter_value(name)
     if isinstance(value, str) and value.strip():
-        path = pathlib.Path(value.strip()).expanduser()
-        if path.is_absolute():
-            return DirectoryDestination(str(path), existing_dir_policy=ExistingFilePolicy.OVERWRITE)
+        explicit_path = _explicit_directory_path(value.strip())
+        if explicit_path is not None:
+            return DirectoryDestination(
+                explicit_path, existing_dir_policy=ExistingFilePolicy.OVERWRITE, create_parents=True
+            )
     return param.build_directory()
+
+
+def _explicit_directory_path(dirname: str) -> str | None:
+    """Return the local path `dirname` names, or None when it is a plain directory name.
+
+    Absolute paths, `~` paths, and `file://` addresses name a location. Any other address, and a drive path from
+    another operating system, cannot be saved to and raise.
+
+    Raises:
+        ValueError: If `dirname` is an address or drive path that names no location on this computer.
+    """
+    local_path_from_uri = path_utils.parse_file_uri(dirname)
+    if local_path_from_uri is not None:
+        if (
+            pathlib.PureWindowsPath(local_path_from_uri).is_absolute()
+            and not pathlib.Path(local_path_from_uri).is_absolute()
+        ):
+            msg = (
+                f"Attempted to save to directory '{dirname}'. Failed because that address does not name a "
+                f"location on this computer. A path from another operating system, such as a 'C:' drive "
+                f"on macOS or Linux, has no equivalent here."
+            )
+            raise ValueError(msg)
+        return local_path_from_uri
+
+    if path_utils.is_url(dirname):
+        msg = (
+            f"Attempted to save to directory '{dirname}'. Failed because that address points somewhere this "
+            f"computer cannot save to. Enter a directory name, a folder path, or a 'file://' address "
+            f"naming a folder on this machine."
+        )
+        raise ValueError(msg)
+
+    expanded = pathlib.Path(dirname).expanduser()
+    if expanded.is_absolute():
+        return str(expanded)
+    return None
