@@ -27,7 +27,7 @@ EDITOR = "align_editor"
 # The mode and preview size change the alignment, which Python does again when they are released. The gain only changes how
 # the widget draws the differences.
 SYNCED_PARAMETERS = ["mode", "gain", "preview_size"]
-ALIGN_PARAMETERS = {"image", "reference", "mode", "preview_size"}
+ALIGN_PARAMETERS = {"image_to_align", "reference", "mode", "preview_size"}
 DEFAULT_PREVIEW_SIZE = 1024
 MIN_PREVIEW_SIZE = 64
 
@@ -58,11 +58,15 @@ class AlignImages(ImageNode):
     node: wipe between them, flip between them, or see where they differ before and after.
     """
 
-    INPUT_TOOLTIP = "The image to move."
+    INPUT_NAME = "image_to_align"
+    INPUT_LABEL = "Image to align"
+    INPUT_TOOLTIP = "The image to align. It is moved, turned and scaled to line up with the reference."
     OUTPUT_FILENAME = "aligned.png"
 
     def add_settings(self) -> None:
-        self.add_image_input("reference", "The image to line up with. The other image is resized to its size.")
+        self.add_image_input(
+            "reference", "The fixed image to line up with. It is never changed. The image is resized to its size."
+        )
         self.add_parameter(
             ParameterDict(
                 name=EDITOR,
@@ -158,10 +162,10 @@ class AlignImages(ImageNode):
         """
         try:
             data = default_widget_value()
-            first, second = self.get_parameter_value("image"), self.get_parameter_value("reference")
+            first, second = self.get_parameter_value("image_to_align"), self.get_parameter_value("reference")
             if image_location(first) and image_location(second):
                 result = tools.align_preview(
-                    open_image(image_location(first), "Image"),
+                    open_image(image_location(first), "Image to align"),
                     open_image(image_location(second), "Reference"),
                     str(self.get_parameter_value("mode") or ALIGN_SCALE),
                     max(MIN_PREVIEW_SIZE, int(self.get_parameter_value("preview_size") or DEFAULT_PREVIEW_SIZE)),

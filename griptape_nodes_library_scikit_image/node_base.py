@@ -92,6 +92,8 @@ class ImageNode(DataNode):
     `add_settings` adds the node's own parameters. `run` does the work and calls `publish` for each output image.
     """
 
+    INPUT_NAME = "image"
+    INPUT_LABEL = "Image"
     INPUT_TOOLTIP = "The image to work on."
     OUTPUT_TOOLTIP = "The result."
     OUTPUT_FILENAME = "result.png"
@@ -99,7 +101,7 @@ class ImageNode(DataNode):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._files: dict[str, ProjectFileParameter] = {}
-        self.add_image_input("image", self.INPUT_TOOLTIP)
+        self.add_image_input(self.INPUT_NAME, self.INPUT_TOOLTIP)
         self.add_settings()
         self.add_outputs()
 
@@ -131,7 +133,9 @@ class ImageNode(DataNode):
     def add_outputs(self) -> None:
         self.add_image_output("output", self.OUTPUT_TOOLTIP, self.OUTPUT_FILENAME)
 
-    def load_input(self, name: str = "image", label: str = "Image") -> Any:
+    def load_input(self, name: str | None = None, label: str | None = None) -> Any:
+        name = name or self.INPUT_NAME
+        label = label or (self.INPUT_LABEL if name == self.INPUT_NAME else name)
         location = image_location(self.get_parameter_value(name))
         if not location:
             msg = f"There is no image in '{label}'. Connect an image to '{label}'."

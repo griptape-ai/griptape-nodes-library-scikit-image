@@ -38,7 +38,7 @@ def node(monkeypatch):
     node = align_images.AlignImages(name="node")
     monkeypatch.setattr(node, "publish_update_to_parameter", lambda name, value: None)
     node.set_parameter_value("mode", tools.ALIGN_SHIFT)
-    node.set_parameter_value("image", {"value": "moved.png"})
+    node.set_parameter_value("image_to_align", {"value": "moved.png"})
     node.set_parameter_value("reference", {"value": "reference.png"})
     return node
 
@@ -108,7 +108,7 @@ def test_the_rotation_and_scale_are_outputs_of_the_node(node):
 def test_a_run_gives_the_same_numbers_the_widget_showed(node):
     published = {}
     node.publish = lambda name, image: published.update({name: image})
-    node.load_input = lambda name="image", label="Image": reference()
+    node.load_input = lambda name=None, label=None: reference()
     node.run(moved())
     data = node.get_parameter_value(align_images.EDITOR)
     assert node.parameter_output_values["shift_right"] == pytest.approx(data["shift_right"], abs=0.5)

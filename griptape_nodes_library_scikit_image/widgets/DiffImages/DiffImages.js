@@ -9,14 +9,14 @@
 // stretched to), map_url, score and message.
 //
 // The views are the same as tools.compare_view in Python: Wipe is the first image left of the divider and the second
-// right of it, A and B are the images, Difference draws the map, and Heat tints the first image where they differ, in
+// right of it, Image 1 and Image 2 are the images, Difference draws the map, and Heat tints the first image where they differ, in
 // the colours of the heat_colours palette. Python sends the palettes (value.palettes) and the tint's strength.
 
 const STYLE_ID = "diff-images-styles";
 import { rampLookup } from "./_ramps.js";
 
 const DEFAULTS = { view: "Difference", wipe: 50, gain: 3, heat_colours: "Spectrum" };
-const VIEWS = ["Wipe", "A", "B", "Difference", "Heat"];
+const VIEWS = ["Wipe", "Image 1", "Image 2", "Difference", "Heat"];
 
 function injectStyles() {
   let el = document.getElementById(STYLE_ID);
@@ -218,12 +218,12 @@ export default function DiffImages(container, props) {
     const hasA = !!urlA && width > 0 && height > 0;
     const hasBoth = hasA && !!urlB;
     // Only the first image is there until the second arrives. The other views need the second and the map.
-    const view = hasBoth ? currentView() : "A";
+    const view = hasBoth ? currentView() : "Image 1";
     canvas.style.display = hasA ? "block" : "none";
     message.style.display = hasA ? "none" : "flex";
     for (const [name, button] of buttons) {
       button.classList.toggle("active", name === view);
-      button.disabled = (name !== "A" && !hasBoth) || locked.includes("view");
+      button.disabled = (name !== "Image 1" && !hasBoth) || locked.includes("view");
     }
 
     const context = canvas.getContext("2d");
@@ -234,7 +234,7 @@ export default function DiffImages(container, props) {
       const first = pictures.a;
       const second = pictures.b;
       const mapReady = map && hasBoth;
-      if (view === "B" && second) {
+      if (view === "Image 2" && second) {
         context.drawImage(second, 0, 0, w, h);
       } else if (view === "Difference" && mapReady) {
         context.imageSmoothingEnabled = true;

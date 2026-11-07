@@ -17,8 +17,8 @@ class CompareView(StrEnum):
     """What Diff Images shows in its widget, and saves as its output."""
 
     WIPE = "Wipe"
-    A = "A"
-    B = "B"
+    IMAGE_1 = "Image 1"
+    IMAGE_2 = "Image 2"
     DIFFERENCE = "Difference"
     HEAT = "Heat"
 

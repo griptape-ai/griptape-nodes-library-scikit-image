@@ -27,7 +27,7 @@ EDITOR = "diff_editor"
 # The gain, view and wipe position only change how the widget draws what it has, and they are what the node saves. The
 # preview size changes what is compared, so Python compares again when it is released.
 SYNCED_PARAMETERS = ["gain", "preview_size", "view", "wipe", "heat_colours"]
-COMPARE_PARAMETERS = {"image", "other", "preview_size"}
+COMPARE_PARAMETERS = {"image_1", "image_2", "preview_size"}
 DEFAULT_PREVIEW_SIZE = 1024
 MIN_PREVIEW_SIZE = 64
 
@@ -58,11 +58,13 @@ class DiffImages(ImageNode):
     node. The node saves the view the widget is showing.
     """
 
+    INPUT_NAME = "image_1"
+    INPUT_LABEL = "Image 1"
     INPUT_TOOLTIP = "The first image."
     OUTPUT_FILENAME = "compare.png"
 
     def add_settings(self) -> None:
-        self.add_image_input("other", "The image to compare with. It is resized to the size of the first.")
+        self.add_image_input("image_2", "The second image. It is resized to the size of the first.")
         self.add_parameter(
             ParameterDict(
                 name=EDITOR,
@@ -82,7 +84,7 @@ class DiffImages(ImageNode):
                 name="view",
                 default_value=CompareView.DIFFERENCE,
                 tooltip=(
-                    "What the widget shows, and what the node saves. Wipe splits the images at the wipe position. A and B "
+                    "What the widget shows, and what the node saves. Wipe splits the images at the wipe position. Image 1 and Image 2 "
                     "are the images. Difference is white where they differ. Heat tints the first image red where they "
                     "differ."
                 ),
@@ -195,15 +197,15 @@ class DiffImages(ImageNode):
         """
         try:
             data = default_widget_value()
-            first, second = self.get_parameter_value("image"), self.get_parameter_value("other")
+            first, second = self.get_parameter_value("image_1"), self.get_parameter_value("image_2")
             data["image_url"], data["other_url"] = browser_url(first), browser_url(second)
             if image_location(first):
-                image = open_image(image_location(first), "Image")
+                image = open_image(image_location(first), "Image 1")
                 data["width"], data["height"] = image.size
                 if image_location(second):
                     size = int(self.get_parameter_value("preview_size") or DEFAULT_PREVIEW_SIZE)
                     score, difference = tools.compare_preview(
-                        image, open_image(image_location(second), "Other"), max(MIN_PREVIEW_SIZE, size)
+                        image, open_image(image_location(second), "Image 2"), max(MIN_PREVIEW_SIZE, size)
                     )
                     data["map_url"] = data_url(difference)
                     data["score"] = score
@@ -214,7 +216,7 @@ class DiffImages(ImageNode):
             logger.warning("%s: could not update the comparison: %s", self.name, e)
 
     def run(self, image: Any) -> None:
-        other = self.load_input("other", "Other")
+        other = self.load_input("image_2", "Image 2")
         score, shown = tools.compare_view(
             image,
             other,

@@ -39,7 +39,7 @@ def load_nodes():
 
 def test_every_node_can_be_created():
     for cls in load_nodes():
-        assert cls(name="node").get_parameter_by_name("image") is not None
+        assert cls(name="node").get_parameter_by_name(getattr(cls, "INPUT_NAME", "image")) is not None
 
 
 def test_every_image_node_runs_with_its_default_settings(tmp_path):

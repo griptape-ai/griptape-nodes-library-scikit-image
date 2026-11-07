@@ -34,8 +34,8 @@ def node(monkeypatch):
     monkeypatch.setattr(diff_images, "open_image", lambda location, label: images[location])
     node = diff_images.DiffImages(name="node")
     monkeypatch.setattr(node, "publish_update_to_parameter", lambda name, value: None)
-    node.set_parameter_value("image", {"value": "a.png"})
-    node.set_parameter_value("other", {"value": "b.png"})
+    node.set_parameter_value("image_1", {"value": "a.png"})
+    node.set_parameter_value("image_2", {"value": "b.png"})
     return node
 
 
@@ -88,39 +88,39 @@ def test_the_widget_map_matches_the_saved_difference_once_the_gain_is_applied():
 
 
 def test_one_image_is_shown_alone(node):
-    node.set_parameter_value("other", None)
+    node.set_parameter_value("image_2", None)
     data = node.get_parameter_value(diff_images.EDITOR)
     assert data["image_url"] == "http://example/a.png" and data["other_url"] == ""
     assert data["map_url"] == "" and data["score"] is None
 
 
 def test_no_images_leave_the_widget_empty(node):
-    node.set_parameter_value("image", None)
-    node.set_parameter_value("other", None)
+    node.set_parameter_value("image_1", None)
+    node.set_parameter_value("image_2", None)
     data = node.get_parameter_value(diff_images.EDITOR)
     assert (data["image_url"], data["width"], data["map_url"]) == ("", 0, "")
 
 
 def test_a_saved_workflow_refreshes_the_widget(node):
     node.set_parameter_value(diff_images.EDITOR, diff_images.default_widget_value(), initial_setup=True)
-    node.set_parameter_value("other", {"value": "b.png"}, initial_setup=True)
+    node.set_parameter_value("image_2", {"value": "b.png"}, initial_setup=True)
     assert node.get_parameter_value(diff_images.EDITOR)["other_url"] == "http://example/b.png"
 
 
-@pytest.mark.parametrize("view", ["Wipe", "A", "B", "Difference", "Heat"])
+@pytest.mark.parametrize("view", ["Wipe", "Image 1", "Image 2", "Difference", "Heat"])
 def test_a_run_saves_the_view_the_widget_shows(node, view):
     published = {}
     node.publish = lambda name, image: published.update({name: image})
-    node.load_input = lambda name="image", label="Image": picture(shift=40)
+    node.load_input = lambda name=None, label=None: picture(shift=40)
     node.set_parameter_value("view", view)
     node.set_parameter_value("wipe", 25.0)
     node.run(picture())
     shown = np.asarray(published["output"]).astype(int)
     first, second = np.asarray(picture()).astype(int), np.asarray(picture(shift=40)).astype(int)
     match view:
-        case "A":
+        case "Image 1":
             assert np.abs(shown - first).max() <= 1
-        case "B":
+        case "Image 2":
             assert np.abs(shown - second).max() <= 1
         case "Wipe":
             cut = round(400 * 0.25)

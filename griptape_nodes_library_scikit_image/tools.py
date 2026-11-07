@@ -346,7 +346,7 @@ def compare_view(
 ) -> tuple[float, Any]:
     """How alike two images are, 1 for the same, and the picture the Compare widget shows for `view`.
 
-    Wipe is the first image up to `wipe` percent of the width and the second after it. A and B are the images, the
+    Wipe is the first image up to `wipe` percent of the width and the second after it. Image 1 and Image 2 are the images, the
     second resized to the first. Difference is white where they differ, and Heat tints the first image there, in the
     colours of `palette`. The widget's JavaScript draws the same views from the preview, so what is saved is what it
     showed.
@@ -363,9 +363,9 @@ def compare_view(
         case CompareView.HEAT:
             alpha = level * HEAT_ALPHA
             result = first * (1 - alpha) + heat_colours(level[..., 0], palette) * alpha
-        case CompareView.A:
+        case CompareView.IMAGE_1:
             result = first
-        case CompareView.B:
+        case CompareView.IMAGE_2:
             result = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
         case CompareView.WIPE:
             result = first.copy()
