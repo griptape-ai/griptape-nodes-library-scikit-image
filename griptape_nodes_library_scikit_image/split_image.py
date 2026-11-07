@@ -180,7 +180,6 @@ class SplitImage(SuccessFailureNode):
 
         self._preview_file = ProjectFileParameter(node=self, name="preview_file", default_filename="preview.jpg")
         self._preview_file.add_parameter()
-        self._preview_key: tuple[str, SplitSettings] | None = None
         self.add_parameter(
             Parameter(
                 name="pieces",
@@ -260,26 +259,17 @@ class SplitImage(SuccessFailureNode):
 
             image = self._load_image(location)
             found, dropped = runner.scan_pieces(image, settings)
-            self._save_preview(location, image, found, dropped, settings)
+            self._save_preview(image, found, dropped, settings)
             self.publish_update_to_parameter("preview", self.parameter_output_values["preview"])
             self.publish_update_to_parameter("count", len(found))
         except Exception as e:  # noqa: BLE001
             logger.warning("%s: could not update the preview: %s", self.name, e)
 
     def _save_preview(
-        self, location: str, image: Any, found: list[tuple[Region, Any]], dropped: list[Region], settings: SplitSettings
+        self, image: Any, found: list[tuple[Region, Any]], dropped: list[Region], settings: SplitSettings
     ) -> None:
-        """Draw the preview, save it, and set it and the count as outputs.
-
-        Running the node right after an edit repeats the same scan. The preview file is versioned, so saving it again
-        would leave a second copy. When the image and settings match the last save, keep that preview.
-        """
+        """Draw the preview, save it, and set it and the count as outputs."""
         from griptape_nodes_library_scikit_image import runner
-
-        key = (location, settings)
-        if key == self._preview_key and self.parameter_output_values.get("preview") is not None:
-            self.parameter_output_values["count"] = len(found)
-            return
 
         padding = round(settings.padding / 100 * max(image.size))
         preview = runner.draw_preview(image, [region for region, _ in found], dropped, padding)
@@ -288,7 +278,6 @@ class SplitImage(SuccessFailureNode):
         saved = self._preview_file.build_file().write_bytes(buffer.getvalue())
         self.parameter_output_values["preview"] = ImageUrlArtifact(value=saved.location)
         self.parameter_output_values["count"] = len(found)
-        self._preview_key = key
 
     def validate_before_node_run(self) -> list[Exception] | None:
         exceptions = list(super().validate_before_node_run() or [])
@@ -352,7 +341,7 @@ class SplitImage(SuccessFailureNode):
 
         image = self._load_image(location)
         found, dropped = runner.scan_pieces(image, settings)
-        self._save_preview(location, image, found, dropped, settings)
+        self._save_preview(image, found, dropped, settings)
         if not found:
             msg = (
                 "No pieces were found. Lower 'Sensitivity' to pick up fainter marks, lower 'Minimum size', or turn off "
