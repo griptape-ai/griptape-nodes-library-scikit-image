@@ -48,19 +48,19 @@ class TestBuildOutputDirectory:
         destination, param = build(str(tmp_path / "pieces"))
 
         param.build_directory.assert_not_called()
-        assert destination._directory._dir_path == str(tmp_path / "pieces")
+        assert pathlib.Path(str(destination._directory._dir_path)) == tmp_path / "pieces"
         assert destination._existing_dir_policy == ExistingFilePolicy.OVERWRITE
 
     def test_home_path_is_expanded(self) -> None:
         destination, _ = build("~/pieces")
 
-        assert destination._directory._dir_path == str(pathlib.Path("~/pieces").expanduser())
+        assert pathlib.Path(str(destination._directory._dir_path)) == pathlib.Path("~/pieces").expanduser()
 
     def test_file_uri_is_used_as_given(self, tmp_path: pathlib.Path) -> None:
         destination, param = build((tmp_path / "pieces").as_uri())
 
         param.build_directory.assert_not_called()
-        assert destination._directory._dir_path == str(tmp_path / "pieces")
+        assert pathlib.Path(str(destination._directory._dir_path)) == tmp_path / "pieces"
 
     def test_web_address_raises(self) -> None:
         with pytest.raises(ValueError, match="cannot save to"):
