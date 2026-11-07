@@ -27,6 +27,11 @@
             "description": "The image with the pieces Split Image found outlined and numbered, with the settings as sliders. Click a piece to leave it out."
         },
         {
+            "name": "LinesToSvg",
+            "path": "griptape_nodes_library_scikit_image/widgets/LinesToSvg/LinesToSvg.js",
+            "description": "The traced shapes of Lines to SVG on your image, in the node's fill colour, before you run the node."
+        },
+        {
             "name": "BoilingLines",
             "path": "griptape_nodes_library_scikit_image/widgets/BoilingLines/BoilingLines.js",
             "description": "Live preview of the Boiling Lines wobble on your image, with a frame scrubber, a noise view and the settings."

@@ -14,7 +14,6 @@ WORK_SIZE = 900
 SVG_WORK_SIZE = 1600
 FLOW_SIZE = 512
 MAX_SVG_POINTS = 400_000
-PREVIEW_LIGHT = 150
 ALIGN_SIZE = 512
 ALIGN_BLUR = 2.0
 ALIGN_REFINEMENTS = ((4.0, 1.0, 0.06, 0.02), (1.0, 0.25, 0.015, 0.005), (0.3, 0.1, 0.006, 0.002))
@@ -351,16 +350,15 @@ def inbetween_frames(image: Any, other: Any, count: int) -> list[Any]:
     return frames
 
 
-def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -> tuple[str, int, Any]:
-    """Trace the outline of every mark into an SVG filled with one colour.
+def trace_lines(image: Any, sensitivity: float, simplify: float) -> tuple[int, int, list[str]]:
+    """Trace the outline of every mark. Returns the image's width and height, and one SVG path per outline.
 
-    Returns the SVG text, the number of shapes, and a preview image of the traced shapes at the size of the image.
+    The paths are in the image's pixels. Raises a ValueError when nothing is found or when there is too much to trace.
     """
     import numpy as np
     import PIL.Image
-    from skimage import draw, measure
+    from skimage import measure
 
-    fill = parse_colour(colour)
     width, height = image.size
     scale = min(1.0, SVG_WORK_SIZE / max(width, height))
     small = image.convert("RGB").resize(
@@ -370,7 +368,7 @@ def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -
     if not marks.any():
         msg = "No marks were found. Lower 'Sensitivity' to pick up fainter marks."
         raise ValueError(msg)
-    outlines = []
+    paths = []
     points = 0
     for contour in measure.find_contours(np.pad(marks.astype(np.float32), 1), 0.5):
         outline = measure.approximate_polygon(contour, tolerance=simplify * scale)
@@ -380,20 +378,21 @@ def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -
         if points > MAX_SVG_POINTS:
             msg = "The drawing has too many marks to trace. Raise 'Sensitivity' or 'Simplify'."
             raise ValueError(msg)
-        outlines.append((outline[:-1] - 1) / scale)
+        scaled = (outline[:-1] - 1) / scale
+        paths.append(" L".join(f"{x:.1f},{y:.1f}" for y, x in scaled).join(("M", " Z")))
+    return width, height, paths
 
-    paths = [" L".join(f"{x:.1f},{y:.1f}" for y, x in outline).join(("M", " Z")) for outline in outlines]
-    svg = (
+
+def svg_text(width: int, height: int, paths: list[str], colour: str) -> str:
+    """The SVG file for traced outlines: one path filled with one colour, with holes left open by the even-odd rule."""
+    fill = parse_colour(colour)
+    return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
         f'<path fill="#{fill[0]:02x}{fill[1]:02x}{fill[2]:02x}" fill-rule="evenodd" d="{" ".join(paths)}"/></svg>'
     )
 
-    # Fill with the even-odd rule, as the SVG does, so the holes in the marks stay open.
-    filled = np.zeros((height, width), dtype=bool)
-    for outline in outlines:
-        rows, columns = draw.polygon(outline[:, 0], outline[:, 1], shape=filled.shape)
-        filled[rows, columns] ^= True
-    light = (fill[0] * 0.299 + fill[1] * 0.587 + fill[2] * 0.114) > PREVIEW_LIGHT
-    backdrop = np.full((height, width, 3), 40 if light else 255, dtype=np.uint8)
-    backdrop[filled] = fill
-    return svg, len(outlines), PIL.Image.fromarray(backdrop)
+
+def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -> tuple[str, int]:
+    """Trace the outline of every mark into an SVG filled with one colour. Returns the SVG text and the shape count."""
+    width, height, paths = trace_lines(image, sensitivity, simplify)
+    return svg_text(width, height, paths, colour), len(paths)

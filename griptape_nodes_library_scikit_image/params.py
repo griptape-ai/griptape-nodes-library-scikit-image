@@ -28,9 +28,20 @@ __all__ = [
 MODES = {ParameterMode.INPUT, ParameterMode.PROPERTY}
 
 
-def float_parameter(name: str, default: float, tooltip: str, low: float, high: float, step: float) -> ParameterFloat:
+def float_parameter(
+    name: str, default: float, tooltip: str, low: float, high: float, step: float, *, slider: bool = False
+) -> ParameterFloat:
+    """A number setting. With `slider`, it is a slider whose range is a guide, so a typed value may go beyond it."""
     return ParameterFloat(
-        name=name, default_value=default, tooltip=tooltip, min_val=low, max_val=high, step=step, allowed_modes=MODES
+        name=name,
+        default_value=default,
+        tooltip=tooltip,
+        min_val=low,
+        max_val=high,
+        step=step,
+        slider=slider,
+        soft_limits=slider,
+        allowed_modes=MODES,
     )
 
 

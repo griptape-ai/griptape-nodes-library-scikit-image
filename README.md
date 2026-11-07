@@ -11,7 +11,7 @@ Nodes for photos and scans of drawings, built on [scikit-image](https://scikit-i
 | [Equalize Contrast](#image-nodes) | Bring out detail with adaptive histogram equalization, on lightness only. |
 | [Align Images](#image-nodes) | Shift, and if needed turn and scale, an image to line up with a reference. |
 | [Compare Images](#image-nodes) | Score how alike two images are (SSIM) and show where they differ. |
-| [Lines to SVG](#image-nodes) | Trace the marks into an SVG. |
+| [Lines to SVG](#image-nodes) | Trace the marks into an SVG, with a widget that shows the trace on your image. |
 | [Boiling Lines](#frame-nodes) | Frames of one drawing, each wobbled differently, with a live preview widget. |
 | [Make In-Betweens](#frame-nodes) | Frames that move from one drawing to the next, by optical flow. |
 
@@ -62,7 +62,7 @@ Each takes an image, and a second one where noted, and saves a file in the proje
 | **Equalize Contrast** | `clip_limit` (default 0.02) and `strength` (default 1). It works on lightness only, so colours stay put. | `output` |
 | **Align Images** | `reference`, and `mode`: shift only, shift and rotate, or shift, rotate and scale. It tries each and keeps what matches best, and returns the image unchanged if nothing helps. | `output`, `rotation` (degrees), `scale`, `shift_down`, `shift_right` |
 | **Compare Images** | `other`, and `gain`, which brightens the differences. Default 3. | `similarity` (1 is the same), and `output` (white where they differ). |
-| **Lines to SVG** | `sensitivity`, `simplify` (pixels), and `fill_colour`, chosen with a colour picker. Each stroke becomes a filled shape. | `preview`, the traced shapes as an image. `svg`, the location of the saved file and not the SVG text. `paths`, the number of shapes. |
+| **Lines to SVG** | `sensitivity`, `simplify` (pixels), and `fill_colour`, chosen with a colour picker. Each stroke becomes a filled shape. The **Trace** widget draws the traced shapes on your image, in the fill colour, before you run the node. It has three views: the trace alone, the trace partly see-through over the image, and the image. Changing the fill colour is instant, and the other settings trace again when you release them. | `svg`, the location of the saved file and not the SVG text. `paths`, the number of shapes. |
 
 ## Frame nodes
 
