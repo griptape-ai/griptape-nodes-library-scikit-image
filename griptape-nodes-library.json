@@ -32,6 +32,11 @@
             "description": "The traced shapes of Lines to SVG on your image, in the node's fill colour, before you run the node."
         },
         {
+            "name": "CompareImages",
+            "path": "griptape_nodes_library_scikit_image/widgets/CompareImages/CompareImages.js",
+            "description": "Two images to wipe between, flip between, or see where they differ, with the gain applied live."
+        },
+        {
             "name": "BoilingLines",
             "path": "griptape_nodes_library_scikit_image/widgets/BoilingLines/BoilingLines.js",
             "description": "Live preview of the Boiling Lines wobble on your image, with a frame scrubber, a noise view and the settings."

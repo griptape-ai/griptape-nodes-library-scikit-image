@@ -267,18 +267,45 @@ def align_images(image: Any, reference: Any, mode: str = ALIGN_SHIFT) -> tuple[A
     return to_image(aligned), down, right, angle, factor
 
 
-def compare_images(image: Any, other: Any, gain: float) -> tuple[float, Any]:
-    """How alike two images are, 1 for the same, and a picture of where they differ, white where they do."""
+def dissimilarity(image: Any, other: Any, longest: int | None = None) -> tuple[float, Any]:
+    """How alike two images are, 1 for the same, and where they differ as 1 minus the similarity at every pixel.
+
+    The second image is resized to the first. With `longest`, both are first reduced so their longer side is at most
+    that, which is much faster on a big image. The map has the size of the images that were compared.
+    """
     import numpy as np
     import PIL.Image
     from skimage import metrics
 
+    if longest is not None and max(image.size) > longest:
+        scale = longest / max(image.size)
+        image = image.resize(
+            (max(1, round(image.width * scale)), max(1, round(image.height * scale))), PIL.Image.Resampling.LANCZOS
+        )
     first = rgb_array(image)
     second = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
     outputs = metrics.structural_similarity(first, second, channel_axis=-1, full=True, data_range=1.0)
-    similarity = np.asarray(outputs[-1])
-    difference = np.clip((1 - similarity.mean(axis=-1)) * gain, 0, 1)
-    return float(outputs[0]), to_image(np.repeat(difference[..., None], 3, axis=-1))
+    return float(outputs[0]), 1 - np.asarray(outputs[-1]).mean(axis=-1)
+
+
+def compare_images(image: Any, other: Any, gain: float) -> tuple[float, Any]:
+    """How alike two images are, 1 for the same, and a picture of where they differ, white where they do."""
+    import numpy as np
+
+    score, difference = dissimilarity(image, other)
+    return score, to_image(np.repeat(np.clip(difference * gain, 0, 1)[..., None], 3, axis=-1))
+
+
+def compare_preview(image: Any, other: Any, longest: int) -> tuple[float, Any]:
+    """The similarity and the dissimilarity map as an 8-bit grayscale image, for the widget, which applies the gain.
+
+    The images are reduced to `longest` first. The map is white where the images differ most, with no gain applied.
+    """
+    import numpy as np
+    import PIL.Image
+
+    score, difference = dissimilarity(image, other, longest)
+    return score, PIL.Image.fromarray((np.clip(difference, 0, 1) * 255).round().astype(np.uint8), mode="L")
 
 
 def make_even(image: Any) -> Any:

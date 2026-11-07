@@ -2,23 +2,46 @@
 
 from __future__ import annotations
 
+import base64
+import io
+import logging
 from typing import Any
 
-from griptape_nodes.exe_types.core_types import ParameterMode
+from griptape_nodes.exe_types.core_types import Parameter, ParameterMode
+from griptape_nodes.exe_types.param_types.parameter_dict import ParameterDict
 from griptape_nodes.exe_types.param_types.parameter_float import ParameterFloat
+from griptape_nodes.traits.widget import Widget
 
 from griptape_nodes_library_scikit_image import tools
-from griptape_nodes_library_scikit_image.node_base import ImageNode
-from griptape_nodes_library_scikit_image.params import float_parameter
+from griptape_nodes_library_scikit_image.node_base import ImageNode, browser_url, image_location, open_image
+from griptape_nodes_library_scikit_image.params import float_parameter, int_parameter
 
 __all__ = ["CompareImages"]
+
+logger = logging.getLogger("griptape_nodes")
+
+LIBRARY_NAME = "Griptape Nodes scikit-image Library"
+WIDGET_NAME = "CompareImages"
+EDITOR = "compare_editor"
+# The gain only changes how the widget draws the differences. The preview size changes what is compared, so Python
+# compares again when it is released.
+SYNCED_PARAMETERS = ["gain", "preview_size"]
+COMPARE_PARAMETERS = {"image", "other", "preview_size"}
+DEFAULT_PREVIEW_SIZE = 1024
+MIN_PREVIEW_SIZE = 64
+
+
+def default_widget_value() -> dict[str, Any]:
+    """The widget's value: both images to show, their size, and the map of where they differ."""
+    return {"image_url": "", "other_url": "", "width": 0, "height": 0, "map_url": "", "score": None, "message": ""}
 
 
 class CompareImages(ImageNode):
     """Measure the structural similarity (SSIM) of two images.
 
     Use it to check how far a generated character drifted from its sketch, or how much changed between two versions of a
-    page.
+    page. The widget lets you wipe between the images, flip between them, and see where they differ, before you run the
+    node.
     """
 
     INPUT_TOOLTIP = "The first image."
@@ -27,8 +50,41 @@ class CompareImages(ImageNode):
     def add_settings(self) -> None:
         self.add_image_input("other", "The image to compare with. It is resized to the size of the first.")
         self.add_parameter(
+            ParameterDict(
+                name=EDITOR,
+                default_value=default_widget_value(),
+                tooltip=(
+                    "Wipe between the two images, flip between them, or see where they differ. It updates when you "
+                    "change an image or the preview detail, without running the node."
+                ),
+                allowed_modes={ParameterMode.PROPERTY},
+                traits={Widget(name=WIDGET_NAME, library=LIBRARY_NAME, synced_parameters=SYNCED_PARAMETERS)},
+                ui_options={"display_name": "Compare"},
+                serializable=False,
+            )
+        )
+        self.add_parameter(
             float_parameter(
-                "gain", 3.0, "How bright to draw the differences. Raise it to see small ones.", 0.5, 20.0, 0.5
+                "gain",
+                3.0,
+                "How bright to draw the differences. Raise it to see small ones.",
+                0.5,
+                20.0,
+                0.5,
+                slider=True,
+            )
+        )
+        self.add_parameter(
+            int_parameter(
+                "preview_size",
+                DEFAULT_PREVIEW_SIZE,
+                (
+                    "The longest side, in pixels, of the copies the widget compares. Raise it for finer detail in the "
+                    "widget, which is slower. The saved difference image and the similarity always use the full size."
+                ),
+                256,
+                2048,
+                slider=True,
             )
         )
 
@@ -41,6 +97,58 @@ class CompareImages(ImageNode):
             )
         )
         self.add_image_output("output", "Where the images differ, white where they differ most.", self.OUTPUT_FILENAME)
+
+    def set_parameter_value(
+        self,
+        param_name: str,
+        value: Any,
+        *,
+        initial_setup: bool = False,
+        emit_change: bool = True,
+        skip_before_value_set: bool = False,
+    ) -> None:
+        """Work the widget out again while a workflow loads, because loading skips after_value_set."""
+        super().set_parameter_value(
+            param_name,
+            value,
+            initial_setup=initial_setup,
+            emit_change=emit_change,
+            skip_before_value_set=skip_before_value_set,
+        )
+        if initial_setup and param_name in COMPARE_PARAMETERS:
+            self._update_widget()
+
+    def after_value_set(self, parameter: Parameter, value: Any) -> None:
+        if parameter.name in COMPARE_PARAMETERS:
+            self._update_widget()
+        return super().after_value_set(parameter, value)
+
+    def _update_widget(self) -> None:
+        """Compare the two images at the preview size and hand the widget both of them and the map of differences.
+
+        Editing a setting must never fail, so this only logs. With only one image, the widget shows it alone.
+        """
+        try:
+            data = default_widget_value()
+            first, second = self.get_parameter_value("image"), self.get_parameter_value("other")
+            data["image_url"], data["other_url"] = browser_url(first), browser_url(second)
+            if image_location(first):
+                image = open_image(image_location(first), "Image")
+                data["width"], data["height"] = image.size
+                if image_location(second):
+                    size = int(self.get_parameter_value("preview_size") or DEFAULT_PREVIEW_SIZE)
+                    score, difference = tools.compare_preview(
+                        image, open_image(image_location(second), "Other"), max(MIN_PREVIEW_SIZE, size)
+                    )
+                    buffer = io.BytesIO()
+                    difference.save(buffer, format="PNG")
+                    data["map_url"] = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+                    data["score"] = score
+            self.parameter_output_values[EDITOR] = data
+            self.set_parameter_value(EDITOR, data)
+            self.publish_update_to_parameter(EDITOR, data)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("%s: could not update the comparison: %s", self.name, e)
 
     def run(self, image: Any) -> None:
         other = self.load_input("other", "Other")
