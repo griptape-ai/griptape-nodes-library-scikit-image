@@ -8,13 +8,28 @@ from __future__ import annotations
 from typing import Any
 
 from griptape_nodes_library_scikit_image.runner import estimate_background, find_marks
-from griptape_nodes_library_scikit_image.splitting import Region, padded
+from griptape_nodes_library_scikit_image.splitting import CompareView, Region, padded
 
 WORK_SIZE = 900
 SVG_WORK_SIZE = 1600
+# The Heat view of Diff Images tints the first image with a colour that follows how much the images differ. Each palette
+# is a ramp of (position from 0 to 1, colour) stops. The widget gets them from Python, so it draws the same colours.
+HEAT_PALETTES: dict[str, list[tuple[float, tuple[int, int, int]]]] = {
+    "Spectrum": [
+        (0.0, (40, 60, 200)),
+        (0.25, (30, 170, 220)),
+        (0.5, (60, 200, 90)),
+        (0.75, (250, 220, 40)),
+        (0.9, (250, 130, 30)),
+        (1.0, (230, 30, 30)),
+    ],
+    "Fire": [(0.0, (255, 240, 120)), (0.5, (255, 150, 30)), (1.0, (200, 20, 20))],
+    "Red": [(0.0, (255, 60, 60)), (1.0, (255, 60, 60))],
+}
+DEFAULT_HEAT_PALETTE = "Spectrum"
+HEAT_ALPHA = 0.85
 FLOW_SIZE = 512
 MAX_SVG_POINTS = 400_000
-PREVIEW_LIGHT = 150
 ALIGN_SIZE = 512
 ALIGN_BLUR = 2.0
 ALIGN_REFINEMENTS = ((4.0, 1.0, 0.06, 0.02), (1.0, 0.25, 0.015, 0.005), (0.3, 0.1, 0.006, 0.002))
@@ -268,18 +283,111 @@ def align_images(image: Any, reference: Any, mode: str = ALIGN_SHIFT) -> tuple[A
     return to_image(aligned), down, right, angle, factor
 
 
-def compare_images(image: Any, other: Any, gain: float) -> tuple[float, Any]:
-    """How alike two images are, 1 for the same, and a picture of where they differ, white where they do."""
+def align_preview(image: Any, reference: Any, mode: str, longest: int) -> dict[str, Any]:
+    """Line an image up with a reference at a reduced size, for the widget, and show how much that helped.
+
+    Both are reduced so the reference's longer side is at most `longest`. Returns the reduced reference and aligned
+    image, the similarity and the map of differences before and after, and the shift, turn and scale. The shift is in
+    the pixels of the full-size reference, so it can be shown beside the saved result.
+    """
+    import PIL.Image
+
+    scale = min(1.0, longest / max(reference.size))
+    size = (max(1, round(reference.width * scale)), max(1, round(reference.height * scale)))
+    small_reference = to_image(rgb_array(reference.resize(size, PIL.Image.Resampling.LANCZOS)))
+    small_image = to_image(rgb_array(image.resize(size, PIL.Image.Resampling.LANCZOS)))
+    aligned, down, right, rotation, factor = align_images(small_image, small_reference, mode)
+    detail = max(size)
+    return {
+        "reference": small_reference,
+        "aligned": aligned,
+        "before": compare_preview(small_reference, small_image, detail),
+        "after": compare_preview(small_reference, aligned, detail),
+        "shift_down": down / scale,
+        "shift_right": right / scale,
+        "rotation": rotation,
+        "scale": factor,
+    }
+
+
+def dissimilarity(image: Any, other: Any, longest: int | None = None) -> tuple[float, Any]:
+    """How alike two images are, 1 for the same, and where they differ as 1 minus the similarity at every pixel.
+
+    The second image is resized to the first. With `longest`, both are first reduced so their longer side is at most
+    that, which is much faster on a big image. The map has the size of the images that were compared.
+    """
     import numpy as np
     import PIL.Image
     from skimage import metrics
 
+    if longest is not None and max(image.size) > longest:
+        scale = longest / max(image.size)
+        image = image.resize(
+            (max(1, round(image.width * scale)), max(1, round(image.height * scale))), PIL.Image.Resampling.LANCZOS
+        )
     first = rgb_array(image)
     second = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
     outputs = metrics.structural_similarity(first, second, channel_axis=-1, full=True, data_range=1.0)
-    similarity = np.asarray(outputs[-1])
-    difference = np.clip((1 - similarity.mean(axis=-1)) * gain, 0, 1)
-    return float(outputs[0]), to_image(np.repeat(difference[..., None], 3, axis=-1))
+    return float(outputs[0]), 1 - np.asarray(outputs[-1]).mean(axis=-1)
+
+
+def heat_colours(level: Any, palette: str) -> Any:
+    """The colour of the palette at each level from 0 to 1, as an array in 0..1 with a colour channel added."""
+    import numpy as np
+
+    stops = HEAT_PALETTES.get(palette, HEAT_PALETTES[DEFAULT_HEAT_PALETTE])
+    positions = [position for position, _ in stops]
+    channels = [np.interp(level, positions, [colour[c] / 255 for _, colour in stops]) for c in range(3)]
+    return np.stack(channels, axis=-1)
+
+
+def compare_view(
+    image: Any, other: Any, view: str, gain: float, wipe: float, palette: str = DEFAULT_HEAT_PALETTE
+) -> tuple[float, Any]:
+    """How alike two images are, 1 for the same, and the picture the Compare widget shows for `view`.
+
+    Wipe is the first image up to `wipe` percent of the width and the second after it. Image 1 and Image 2 are the images, the
+    second resized to the first. Difference is white where they differ, and Heat tints the first image there, in the
+    colours of `palette`. The widget's JavaScript draws the same views from the preview, so what is saved is what it
+    showed.
+    """
+    import numpy as np
+    import PIL.Image
+
+    score, difference = dissimilarity(image, other)
+    level = np.clip(difference * gain, 0, 1)[..., None]
+    first = rgb_array(image)
+    match view:
+        case CompareView.DIFFERENCE:
+            result = np.repeat(level, 3, axis=-1)
+        case CompareView.HEAT:
+            alpha = level * HEAT_ALPHA
+            result = first * (1 - alpha) + heat_colours(level[..., 0], palette) * alpha
+        case CompareView.IMAGE_1:
+            result = first
+        case CompareView.IMAGE_2:
+            result = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
+        case CompareView.WIPE:
+            result = first.copy()
+            second = rgb_array(other.resize(image.size, PIL.Image.Resampling.LANCZOS))
+            cut = round(image.width * min(max(wipe, 0), 100) / 100)
+            result[:, cut:] = second[:, cut:]
+        case _:
+            msg = f"Unknown view: {view!r}"
+            raise ValueError(msg)
+    return score, to_image(result)
+
+
+def compare_preview(image: Any, other: Any, longest: int) -> tuple[float, Any]:
+    """The similarity and the dissimilarity map as an 8-bit grayscale image, for the widget, which applies the gain.
+
+    The images are reduced to `longest` first. The map is white where the images differ most, with no gain applied.
+    """
+    import numpy as np
+    import PIL.Image
+
+    score, difference = dissimilarity(image, other, longest)
+    return score, PIL.Image.fromarray((np.clip(difference, 0, 1) * 255).round().astype(np.uint8), mode="L")
 
 
 def make_even(image: Any) -> Any:
@@ -351,16 +459,15 @@ def inbetween_frames(image: Any, other: Any, count: int) -> list[Any]:
     return frames
 
 
-def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -> tuple[str, int, Any]:
-    """Trace the outline of every mark into an SVG filled with one colour.
+def trace_lines(image: Any, sensitivity: float, simplify: float) -> tuple[int, int, list[str]]:
+    """Trace the outline of every mark. Returns the image's width and height, and one SVG path per outline.
 
-    Returns the SVG text, the number of shapes, and a preview image of the traced shapes at the size of the image.
+    The paths are in the image's pixels. Raises a ValueError when nothing is found or when there is too much to trace.
     """
     import numpy as np
     import PIL.Image
-    from skimage import draw, measure
+    from skimage import measure
 
-    fill = parse_colour(colour)
     width, height = image.size
     scale = min(1.0, SVG_WORK_SIZE / max(width, height))
     small = image.convert("RGB").resize(
@@ -370,7 +477,7 @@ def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -
     if not marks.any():
         msg = "No marks were found. Lower 'Sensitivity' to pick up fainter marks."
         raise ValueError(msg)
-    outlines = []
+    paths = []
     points = 0
     for contour in measure.find_contours(np.pad(marks.astype(np.float32), 1), 0.5):
         outline = measure.approximate_polygon(contour, tolerance=simplify * scale)
@@ -380,20 +487,21 @@ def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -
         if points > MAX_SVG_POINTS:
             msg = "The drawing has too many marks to trace. Raise 'Sensitivity' or 'Simplify'."
             raise ValueError(msg)
-        outlines.append((outline[:-1] - 1) / scale)
+        scaled = (outline[:-1] - 1) / scale
+        paths.append(" L".join(f"{x:.1f},{y:.1f}" for y, x in scaled).join(("M", " Z")))
+    return width, height, paths
 
-    paths = [" L".join(f"{x:.1f},{y:.1f}" for y, x in outline).join(("M", " Z")) for outline in outlines]
-    svg = (
+
+def svg_text(width: int, height: int, paths: list[str], colour: str) -> str:
+    """The SVG file for traced outlines: one path filled with one colour, with holes left open by the even-odd rule."""
+    fill = parse_colour(colour)
+    return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">'
         f'<path fill="#{fill[0]:02x}{fill[1]:02x}{fill[2]:02x}" fill-rule="evenodd" d="{" ".join(paths)}"/></svg>'
     )
 
-    # Fill with the even-odd rule, as the SVG does, so the holes in the marks stay open.
-    filled = np.zeros((height, width), dtype=bool)
-    for outline in outlines:
-        rows, columns = draw.polygon(outline[:, 0], outline[:, 1], shape=filled.shape)
-        filled[rows, columns] ^= True
-    light = (fill[0] * 0.299 + fill[1] * 0.587 + fill[2] * 0.114) > PREVIEW_LIGHT
-    backdrop = np.full((height, width, 3), 40 if light else 255, dtype=np.uint8)
-    backdrop[filled] = fill
-    return svg, len(outlines), PIL.Image.fromarray(backdrop)
+
+def lines_to_svg(image: Any, sensitivity: float, simplify: float, colour: str) -> tuple[str, int]:
+    """Trace the outline of every mark into an SVG filled with one colour. Returns the SVG text and the shape count."""
+    width, height, paths = trace_lines(image, sensitivity, simplify)
+    return svg_text(width, height, paths, colour), len(paths)

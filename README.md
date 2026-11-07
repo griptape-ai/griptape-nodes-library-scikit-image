@@ -4,14 +4,14 @@ Nodes for photos and scans of drawings, built on [scikit-image](https://scikit-i
 
 | Node | What it does |
 |---|---|
-| [Split Image](#split-image) | Cut a model sheet into one image per drawing, with a live preview. |
+| [Split Image](#split-image) | Cut a model sheet into one image per drawing, with a widget that shows the pieces and the settings. |
 | [Flatten Paper](#image-nodes) | Take shadows and gradients out of a photo or scan so the paper is white. |
 | [Lines to Alpha](#image-nodes) | The marks on the paper as an alpha channel: white on a mark, black on paper. |
 | [Trim to Content](#image-nodes) | Crop to the box that holds the marks. |
 | [Equalize Contrast](#image-nodes) | Bring out detail with adaptive histogram equalization, on lightness only. |
-| [Align Images](#image-nodes) | Shift, and if needed turn and scale, an image to line up with a reference. |
-| [Compare Images](#image-nodes) | Score how alike two images are (SSIM) and show where they differ. |
-| [Lines to SVG](#image-nodes) | Trace the marks into an SVG. |
+| [Align Images](#image-nodes) | Shift, and if needed turn and scale, an image to line up with a reference, with a widget that shows the result. |
+| [Diff Images](#image-nodes) | Score how alike two images are (SSIM) and show where they differ, with a widget to wipe between them. |
+| [Lines to SVG](#image-nodes) | Trace the marks into an SVG, with a widget that shows the trace on your image. |
 | [Boiling Lines](#frame-nodes) | Frames of one drawing, each wobbled differently, with a live preview widget. |
 | [Make In-Betweens](#frame-nodes) | Frames that move from one drawing to the next, by optical flow. |
 
@@ -21,7 +21,7 @@ Split Image on a sheet of eleven dog poses. The preview outlines and numbers eac
 
 ## Quick start
 
-**Split a model sheet into poses.** Connect the photo to **Split Image**. The preview appears on the node, with each piece outlined, numbered and in its own colour, and dropped pieces hatched in red. Drag **Join distance** until each pose is one piece. Run the node to save the pieces in a folder such as `pieces_v001`.
+**Split a model sheet into poses.** Connect the photo to **Split Image**. The image appears on the node, with each piece outlined, numbered and in its own colour, and dropped pieces hatched in red. Drag **Join distance** until each pose is one piece, and click a piece to leave it out. Run the node to save the pieces in a folder such as `pieces_v001`.
 
 **Make a boiling-line animation.** Connect a drawing to **Boiling Lines**, and play the preview in the widget to tune the wobble. Run the node, then wire its `frames` into Create Video from Frames and play it at 6 to 12 frames per second.
 
@@ -37,11 +37,12 @@ Finds the marks on the paper, joins the marks that sit close together into one p
 | **Background** | `paper` keeps the paper around each piece. `transparent` clears everything outside the piece's shape. |
 | **Join distance** | Marks closer together than this, as a percentage of the image's longer side, count as one piece. Raise it if a pose comes apart, for example a tail or a hand drawn a little away from the body. Lower it if two poses merge. Default 0.6. |
 | **Padding** | Space to keep around each piece, as a percentage of the image's longer side. Default 1.5. |
+| **Min size** | Pieces whose longest side is shorter than this, as a percentage of the image's longer side, are dropped. This removes specks. The widget updates as you drag it. Default 3. |
 | **File prefix** | The start of each file name, as in Extract Frames: `pieces.0001.png`, `pieces.0002.png` and so on. Default `pieces`. |
 | **Number padding** | How many digits the piece number is zero-padded to. Default 4. |
 | **Output dir** | A versioned folder in the project's outputs, `pieces_v001`, `pieces_v002` and so on, with the pieces inside it. The gear button creates and connects a Directory Output Settings node to choose another place. |
-| **Advanced** | `sensitivity` is how different from the paper a mark must be to count, darker or lighter. Lower picks up fainter marks, such as light crayon, and also paper texture and shadows. Default 0.12. `min_size` drops pieces whose longest side is shorter than this, as a percentage of the image's longer side, which removes specks. Default 3. `ignore_corner_pieces` drops pieces that touch two edges of the image, such as a thumb holding the paper. A piece that touches only one edge is kept. |
-| **Preview** (out) | The image with each piece outlined in its own colour and numbered in reading order. With padding, a dashed box in the same colour shows the crop that is saved. Dropped pieces are outlined in red and cross-hatched. It updates when you change the image or a setting, without running the node. |
+| **Advanced** | `sensitivity` is how different from the paper a mark must be to count, darker or lighter. Lower picks up fainter marks, such as light crayon, and also paper texture and shadows. Default 0.12. `ignore_corner_pieces` drops pieces that touch two edges of the image, such as a thumb holding the paper. A piece that touches only one edge is kept. |
+| **Pieces** (widget) | The image with each piece outlined in its own colour and numbered in reading order. With padding, a dashed box in the same colour shows the crop that is saved. Dropped pieces are hatched in red. Click a piece to leave it out, and click it again to bring it back. It updates when you change the image or a setting, without running the node, and the dashed padding boxes follow the **Padding** slider as you drag it. |
 | **Pieces** (out) | The pieces as images, in reading order. |
 | **Sequence** (out) | The pieces as a sequence, to wire into Inspect Sequence or any other node that takes one. |
 | **Count** (out) | How many pieces were found. |
@@ -59,9 +60,9 @@ Each takes an image, and a second one where noted, and saves a file in the proje
 | **Lines to Alpha** | `sensitivity` (default 0.12) is how different from the paper a mark must be to count. `softness` (default 0.15) is how gradually a mark fades in. Lower is crisper. | `alpha`, a greyscale image: white on a mark, black on paper. |
 | **Trim to Content** | `sensitivity`, and `padding` as a percentage of the longer side. Default 1.5. | `output` |
 | **Equalize Contrast** | `clip_limit` (default 0.02) and `strength` (default 1). It works on lightness only, so colours stay put. | `output` |
-| **Align Images** | `reference`, and `mode`: shift only, shift and rotate, or shift, rotate and scale. It tries each and keeps what matches best, and returns the image unchanged if nothing helps. | `output`, `rotation` (degrees), `scale`, `shift_down`, `shift_right` |
-| **Compare Images** | `other`, and `gain`, which brightens the differences. Default 3. | `similarity` (1 is the same), and `output` (white where they differ). |
-| **Lines to SVG** | `sensitivity`, `simplify` (pixels), and `fill_colour`, chosen with a colour picker. Each stroke becomes a filled shape. | `preview`, the traced shapes as an image. `svg`, the location of the saved file and not the SVG text. `paths`, the number of shapes. |
+| **Align Images** | `image_to_align`, the one that is moved, turned and scaled, and `reference`, the fixed one it is lined up with, which is never changed; `mode`: shift only, shift and rotate, or shift, rotate and scale (it tries each and keeps what matches best, and returns the image unchanged if nothing helps); `gain`, which brightens the differences in the widget (default 3); and `preview_size`, the longest side in pixels of the copies the widget aligns (default 1024). The **Align** widget shows the result before you run the node, with five views: **Wipe** between the reference and the aligned image at a line you drag, **Reference** (the fixed image) and **Aligned** (the image after it was moved), and **Before** and **After**, which draw where they differ before and after the alignment. It also shows the shift, turn and scale it found and how much the match improved. The widget aligns reduced copies, so raise `preview_size` for finer detail, which is slower. The saved image is always aligned at the full size. | `output`, `rotation` (degrees), `scale`, `shift_down`, `shift_right` |
+| **Diff Images** | `image_1` and `image_2`; `view`, which is what the widget shows and what the node saves (default Difference); `wipe`, where the Wipe view splits the images, as a percentage of the width (shown only for Wipe, default 50); `heat_colours`, the colours of the Heat view: Spectrum, from blue through green and yellow to red, Fire, from yellow through orange to red, or Red (shown only for Heat, default Spectrum); `gain`, which brightens the differences (default 3); and `preview_size`, the longest side in pixels of the copies the widget compares (default 1024). The **Diff** widget has five views: **Wipe** between the images at a line you drag, **Image 1** and **Image 2** to flip between them, **Difference**, which is white where they differ, and **Heat**, which tints the first image where they differ, more strongly the more they differ. Gain is applied live. The widget compares reduced copies, so raise `preview_size` for finer detail, which is slower. The saved output and `similarity` always use the full size. | `similarity` (1 is the same), and `output`, the view the widget is showing. |
+| **Lines to SVG** | `sensitivity`, `simplify` (pixels), and `fill_colour`, chosen with a colour picker. Each stroke becomes a filled shape. The **Trace** widget draws the traced shapes on your image, in the fill colour, before you run the node. It has three views: the trace alone, the trace partly see-through over the image, and the image. Changing the fill colour is instant, and the other settings trace again when you release them. | `svg`, the location of the saved file and not the SVG text. `paths`, the number of shapes. |
 
 ## Frame nodes
 
@@ -89,7 +90,7 @@ The preview is drawn in the browser, so dragging a slider is instant. It uses th
 
 ## Limits
 
-- **Touching drawings merge.** Split Image joins marks that sit close together, so two poses that touch, or whose shadows touch, come out as one piece. Lowering **Join distance** can separate them, but can also split a single pose. No one value works for every sheet, which is why the preview is there.
+- **Touching drawings merge.** Split Image joins marks that sit close together, so two poses that touch, or whose shadows touch, come out as one piece. Lowering **Join distance** can separate them, but can also split a single pose. No one value works for every sheet, which is why the widget is there.
 - **Align Images** handles turns of any angle and scale changes up to about 10%. A big turn together with a big scale change can fail.
 - **Make In-Betweens** follows motion, so it works when the two drawings are the same pose a little apart. A large change smears.
 - **Lines to SVG** traces each stroke as a filled shape and not as a centre line, so it is not a vector stroke you can restyle.
@@ -98,7 +99,7 @@ The preview is drawn in the browser, so dragging a slider is instant. It uses th
 ## Troubleshooting
 
 - **"No pieces were found"** or **"No marks were found".** Lower **Sensitivity**. For Split Image, also lower **Minimum size** or turn off **Ignore corner pieces** if a drawing sits in a corner.
-- **A pose is cut in two, or two poses are in one piece.** Change **Join distance** and watch the preview.
+- **A pose is cut in two, or two poses are in one piece.** Change **Join distance** and watch the outlines in the widget.
 - **Create Video from Frames fails with `width not divisible by 2`.** Leave **Even size** on, in Boiling Lines and Make In-Betweens.
 - **An error like `takes 3 positional arguments but 4 were given` after an update.** The engine still holds an older copy of one of the library's modules. Restart the engine completely, not just the library.
 - **The Boiling Lines preview says the browser would not let the widget read the image.** The widget reads the image's pixels in the browser, which needs the file server to allow it. The saved frames are not affected.

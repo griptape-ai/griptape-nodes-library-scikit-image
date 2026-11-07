@@ -67,13 +67,13 @@ def test_aligning_recovers_a_known_shift():
 
 
 def test_comparing_an_image_with_itself_scores_one_and_shows_no_difference():
-    score, difference = tools.compare_images(drawing(), drawing(), 3.0)
+    score, difference = tools.compare_view(drawing(), drawing(), "Difference", 3.0, 50.0)
     assert score == pytest.approx(1.0)
     assert np.asarray(difference).max() == 0
 
 
 def test_comparing_different_images_scores_lower():
-    score, difference = tools.compare_images(drawing(), tools.flatten_paper(drawing(), 1.0), 3.0)
+    score, difference = tools.compare_view(drawing(), tools.flatten_paper(drawing(), 1.0), "Difference", 3.0, 50.0)
     assert score < 0.99
     assert np.asarray(difference).max() > 0
 
@@ -103,15 +103,19 @@ def test_inbetweens_make_the_frames_asked_for():
     assert all(frame.size == image.size for frame in frames)
 
 
-def test_the_svg_has_one_path_per_shape_and_a_preview_of_the_same_size():
-    svg, count, preview = tools.lines_to_svg(drawing(), 0.12, 1.0, "#112233")
+def test_the_svg_has_one_path_per_shape():
+    svg, count = tools.lines_to_svg(drawing(), 0.12, 1.0, "#112233")
     assert svg.startswith("<svg") and 'fill="#112233"' in svg
     assert count == 2
     assert svg.count("M") >= count
-    assert preview.size == drawing().size
-    marks = np.asarray(preview)
-    assert tuple(marks[70, 80]) == (0x11, 0x22, 0x33)
-    assert tuple(marks[10, 10]) == (40, 40, 40) or tuple(marks[10, 10]) == (255, 255, 255)
+
+
+def test_the_trace_gives_the_size_and_one_path_per_outline():
+    width, height, paths = tools.trace_lines(drawing(), 0.12, 1.0)
+    assert (width, height) == drawing().size
+    assert len(paths) == 2
+    assert all(path.startswith("M") and path.endswith("Z") for path in paths)
+    assert tools.svg_text(width, height, paths, "#112233").count(" Z") == 2
 
 
 def scribbles():

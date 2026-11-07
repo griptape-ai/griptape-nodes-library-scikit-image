@@ -5,7 +5,7 @@
         "author": "Jason Schleifer",
         "description": "Split images such as model sheets into pieces, and clean up, separate, trace, compare and animate drawings with scikit-image.",
         "library_version": "0.1.0",
-        "engine_version": "0.104.0",
+        "engine_version": "0.107.0",
         "tags": [
             "Griptape",
             "Image",
@@ -21,6 +21,26 @@
         }
     },
     "widgets": [
+        {
+            "name": "SplitImage",
+            "path": "griptape_nodes_library_scikit_image/widgets/SplitImage/SplitImage.js",
+            "description": "The image with the pieces Split Image found outlined and numbered, with the settings as sliders. Click a piece to leave it out."
+        },
+        {
+            "name": "LinesToSvg",
+            "path": "griptape_nodes_library_scikit_image/widgets/LinesToSvg/LinesToSvg.js",
+            "description": "The traced shapes of Lines to SVG on your image, in the node's fill colour, before you run the node."
+        },
+        {
+            "name": "DiffImages",
+            "path": "griptape_nodes_library_scikit_image/widgets/DiffImages/DiffImages.js",
+            "description": "Two images to wipe between, flip between, or see where they differ, with the gain applied live."
+        },
+        {
+            "name": "AlignImages",
+            "path": "griptape_nodes_library_scikit_image/widgets/AlignImages/AlignImages.js",
+            "description": "The aligned image against its reference: wipe, flip, and the differences before and after, with the shift, turn and scale found."
+        },
         {
             "name": "BoilingLines",
             "path": "griptape_nodes_library_scikit_image/widgets/BoilingLines/BoilingLines.js",
@@ -93,12 +113,19 @@
             }
         },
         {
-            "class_name": "CompareImages",
-            "file_path": "griptape_nodes_library_scikit_image/compare_images.py",
+            "class_name": "DiffImages",
+            "file_path": "griptape_nodes_library_scikit_image/diff_images.py",
             "metadata": {
                 "category": "image",
                 "description": "Score how alike two images are (SSIM) and show where they differ.",
-                "display_name": "Compare Images"
+                "display_name": "Diff Images",
+                "tags": [
+                    "compare",
+                    "diff",
+                    "difference",
+                    "similarity",
+                    "ssim"
+                ]
             }
         },
         {

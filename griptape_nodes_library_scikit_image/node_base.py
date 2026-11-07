@@ -55,6 +55,15 @@ def open_image(location: str, label: str) -> Any:
         raise NodeError(msg) from e
 
 
+def data_url(image: Any, image_format: str = "PNG") -> str:
+    """A PIL image as a data URL, for a widget that holds its pictures in its value. JPEG for photos, PNG for maps."""
+    import base64
+
+    buffer = io.BytesIO()
+    image.save(buffer, format=image_format, **({"quality": 90} if image_format == "JPEG" else {}))
+    return f"data:image/{image_format.lower()};base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
 def browser_url(value: Any) -> str:
     """A URL the editor can load for an image value, or an empty string if there is none."""
     from griptape_nodes.retained_mode.events.static_file_events import (
@@ -83,6 +92,8 @@ class ImageNode(DataNode):
     `add_settings` adds the node's own parameters. `run` does the work and calls `publish` for each output image.
     """
 
+    INPUT_NAME = "image"
+    INPUT_LABEL = "Image"
     INPUT_TOOLTIP = "The image to work on."
     OUTPUT_TOOLTIP = "The result."
     OUTPUT_FILENAME = "result.png"
@@ -90,7 +101,7 @@ class ImageNode(DataNode):
     def __init__(self, **kwargs: Any) -> None:
         super().__init__(**kwargs)
         self._files: dict[str, ProjectFileParameter] = {}
-        self.add_image_input("image", self.INPUT_TOOLTIP)
+        self.add_image_input(self.INPUT_NAME, self.INPUT_TOOLTIP)
         self.add_settings()
         self.add_outputs()
 
@@ -122,7 +133,9 @@ class ImageNode(DataNode):
     def add_outputs(self) -> None:
         self.add_image_output("output", self.OUTPUT_TOOLTIP, self.OUTPUT_FILENAME)
 
-    def load_input(self, name: str = "image", label: str = "Image") -> Any:
+    def load_input(self, name: str | None = None, label: str | None = None) -> Any:
+        name = name or self.INPUT_NAME
+        label = label or (self.INPUT_LABEL if name == self.INPUT_NAME else name)
         location = image_location(self.get_parameter_value(name))
         if not location:
             msg = f"There is no image in '{label}'. Connect an image to '{label}'."
