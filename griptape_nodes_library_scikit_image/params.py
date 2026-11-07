@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+import pathlib
+
 from griptape_nodes.exe_types.core_types import ParameterMode
+from griptape_nodes.exe_types.node_types import BaseNode
+from griptape_nodes.exe_types.param_components.project_directory_parameter import ProjectDirectoryParameter
 from griptape_nodes.exe_types.param_types.parameter_bool import ParameterBool
 from griptape_nodes.exe_types.param_types.parameter_float import ParameterFloat
 from griptape_nodes.exe_types.param_types.parameter_int import ParameterInt
 from griptape_nodes.exe_types.param_types.parameter_string import ParameterString
+from griptape_nodes.files.directory import DirectoryDestination
+from griptape_nodes.retained_mode.events.os_events import ExistingFilePolicy
 from griptape_nodes.traits.color_picker import ColorPicker
 
-__all__ = ["bool_parameter", "colour_parameter", "float_parameter", "int_parameter", "string_parameter"]
+__all__ = [
+    "bool_parameter",
+    "build_output_directory",
+    "colour_parameter",
+    "float_parameter",
+    "int_parameter",
+    "string_parameter",
+]
 
 MODES = {ParameterMode.INPUT, ParameterMode.PROPERTY}
 
@@ -43,3 +56,17 @@ def colour_parameter(name: str, default: str, tooltip: str) -> ParameterString:
         allowed_modes={ParameterMode.PROPERTY},
         traits={ColorPicker(format="hex")},
     )
+
+
+def build_output_directory(node: BaseNode, param: ProjectDirectoryParameter, name: str) -> DirectoryDestination:
+    """The destination for an output directory parameter.
+
+    A plain name goes through the project's output situation, which nests it under the outputs directory and
+    versions it. An absolute path is the directory the user asked for, so it is used as given.
+    """
+    value = node.get_parameter_value(name)
+    if isinstance(value, str) and value.strip():
+        path = pathlib.Path(value.strip()).expanduser()
+        if path.is_absolute():
+            return DirectoryDestination(str(path), existing_dir_policy=ExistingFilePolicy.OVERWRITE)
+    return param.build_directory()
