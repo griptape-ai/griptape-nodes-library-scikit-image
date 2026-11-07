@@ -59,9 +59,9 @@ def colour_parameter(name: str, default: str, tooltip: str) -> ParameterString:
     )
 
 
-# TODO: remove build_output_directory and _explicit_directory_path once ProjectDirectoryParameter.build_directory()
-# uses absolute paths as given. The engine fix is https://github.com/griptape-ai/griptape-nodes-engine/pull/6246, and
-# the logic below is copied from it.
+# TODO(https://github.com/griptape-ai/griptape-nodes-library-scikit-image/issues/2): remove build_output_directory and
+# _explicit_directory_path once ProjectDirectoryParameter.build_directory() uses absolute paths as given. The engine fix
+# is https://github.com/griptape-ai/griptape-nodes-engine/pull/6246, and the logic below is copied from it.
 def build_output_directory(node: BaseNode, param: ProjectDirectoryParameter, name: str) -> DirectoryDestination:
     """The destination for an output directory parameter.
 
