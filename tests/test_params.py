@@ -31,6 +31,12 @@ class TestBuildOutputDirectory:
 
         assert destination is param.build_directory.return_value
 
+    @pytest.mark.parametrize("name", ["~old_renders", "~tmp"])
+    def test_name_starting_with_a_tilde_goes_through_the_situation(self, name: str) -> None:
+        destination, param = build(name)
+
+        assert destination is param.build_directory.return_value
+
     def test_absolute_path_is_used_as_given(self, tmp_path: pathlib.Path) -> None:
         destination, param = build(str(tmp_path / "pieces"))
 

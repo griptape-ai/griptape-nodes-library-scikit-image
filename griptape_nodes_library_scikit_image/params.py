@@ -61,7 +61,7 @@ def colour_parameter(name: str, default: str, tooltip: str) -> ParameterString:
 
 # TODO: remove build_output_directory and _explicit_directory_path once ProjectDirectoryParameter.build_directory()
 # uses absolute paths as given. The engine fix is https://github.com/griptape-ai/griptape-nodes-engine/pull/6246, and
-# the logic below is copied from it.
+# the logic below is copied from it, with the review's fix for names that start with a tilde.
 def build_output_directory(node: BaseNode, param: ProjectDirectoryParameter, name: str) -> DirectoryDestination:
     """The destination for an output directory parameter.
 
@@ -110,7 +110,10 @@ def _explicit_directory_path(dirname: str) -> str | None:
         )
         raise ValueError(msg)
 
-    expanded = pathlib.Path(dirname).expanduser()
-    if expanded.is_absolute():
-        return str(expanded)
+    # Only "~" and "~/..." name the home directory. A plain name such as "~old_renders" makes expanduser() raise.
+    path = pathlib.Path(dirname)
+    if dirname == "~" or dirname.startswith(("~/", "~\\")):
+        path = path.expanduser()
+    if path.is_absolute():
+        return str(path)
     return None
