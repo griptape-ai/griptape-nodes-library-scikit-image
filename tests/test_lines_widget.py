@@ -74,3 +74,7 @@ def test_a_saved_workflow_refreshes_the_image_url(node):
     node.set_parameter_value(lines_to_svg.EDITOR, stale, initial_setup=True)
     node.set_parameter_value("image", {"value": "drawing.png"}, initial_setup=True)
     assert node.get_parameter_value(lines_to_svg.EDITOR)["image_url"] == "http://example/drawing.png"
+
+
+def test_the_trace_is_not_saved_with_the_workflow(node):
+    assert node.get_parameter_by_name(lines_to_svg.EDITOR).serializable is False

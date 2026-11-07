@@ -31,6 +31,8 @@ from griptape_nodes_library_scikit_image.splitting import (
     DEFAULT_PADDING_DIGITS,
     MAX_PIECES,
     PADDING_CHOICES,
+    Candidate,
+    Region,
     SplitSettings,
     classify,
     excluded_boxes,
@@ -288,7 +290,24 @@ class SplitImage(SuccessFailureNode):
     def after_value_set(self, parameter: Parameter, value: Any) -> None:
         if parameter.name in SCAN_PARAMETERS:
             self._update_widget()
+        elif parameter.name == EDITOR and isinstance(value, dict):
+            # The widget wrote its value, for example by switching a piece off. Only the count follows from that.
+            self._publish_count(value)
         return super().after_value_set(parameter, value)
+
+    def _publish_count(self, data: dict[str, Any]) -> None:
+        """Show how many pieces the node would save: the candidates that are pieces under the current settings, less the
+        ones the user switched off."""
+        settings = self._settings()
+        candidates = [
+            Candidate(Region(*candidate["box"]), candidate["blob"], candidate["tight"], candidate["edges"])
+            for candidate in data.get("candidates") or []
+        ]
+        kept, _ = classify(candidates, settings.min_size, settings.ignore_corner_pieces)
+        switched_off = excluded_boxes(data)
+        count = sum(1 for candidate in kept if tuple(candidate.region.box) not in switched_off)
+        self.parameter_output_values["count"] = count
+        self.publish_update_to_parameter("count", count)
 
     def _update_widget(self) -> None:
         """Scan the current image and settings, and hand the widget the image and the boxes found on it.
@@ -300,7 +319,6 @@ class SplitImage(SuccessFailureNode):
             location = image_location(self.get_parameter_value("image"))
             settings = self._settings()
             data["candidates"] = []
-            kept: list[Any] = []
             if not location:
                 data.update({"image_url": "", "width": 0, "height": 0})
             else:
@@ -326,13 +344,10 @@ class SplitImage(SuccessFailureNode):
                         }
                         for index, candidate in enumerate(candidates)
                     ]
-                    kept, _ = classify(candidates, settings.min_size, settings.ignore_corner_pieces)
-            switched_off = excluded_boxes(data)
-            kept = [candidate for candidate in kept if tuple(candidate.region.box) not in switched_off]
             self.parameter_output_values[EDITOR] = data
             self.set_parameter_value(EDITOR, data)
             self.publish_update_to_parameter(EDITOR, data)
-            self.publish_update_to_parameter("count", len(kept))
+            self._publish_count(data)
         except Exception as e:  # noqa: BLE001
             logger.warning("%s: could not update the pieces: %s", self.name, e)
 

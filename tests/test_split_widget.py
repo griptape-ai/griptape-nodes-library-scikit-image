@@ -198,3 +198,21 @@ console.log(JSON.stringify({ kept: kept.map((c) => c.box), dropped: dropped.map(
     assert out["kept"] == [c.region.box for c in kept]
     assert out["dropped"] == [c.region.box for c in dropped]
     assert kept  # the cases are not all empty
+
+
+def test_switching_a_piece_off_updates_the_count(node, monkeypatch):
+    published = []
+    monkeypatch.setattr(node, "publish_update_to_parameter", lambda name, value: published.append((name, value)))
+    data = node.get_parameter_value(split_image.EDITOR)
+    boxes = kept_boxes(node)
+    assert len(boxes) == 2
+    node.set_parameter_value(split_image.EDITOR, {**data, "excluded": [boxes[0]]})
+    assert node.parameter_output_values["count"] == 1
+    assert ("count", 1) in published
+    node.set_parameter_value(split_image.EDITOR, {**data, "excluded": []})
+    assert node.parameter_output_values["count"] == 2
+
+
+def test_the_count_follows_the_size_filter_without_scanning_again(node):
+    node.set_parameter_value("min_size", 60.0)
+    assert node.parameter_output_values["count"] == 0

@@ -57,6 +57,7 @@ class LinesToSvg(ImageNode):
                 allowed_modes={ParameterMode.PROPERTY},
                 traits={Widget(name=WIDGET_NAME, library=LIBRARY_NAME, synced_parameters=SYNCED_PARAMETERS)},
                 ui_options={"display_name": "Trace"},
+                serializable=False,
             )
         )
         self.add_parameter(
