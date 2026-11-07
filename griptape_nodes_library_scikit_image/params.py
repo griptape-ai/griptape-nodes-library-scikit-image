@@ -63,6 +63,9 @@ def build_output_directory(node: BaseNode, param: ProjectDirectoryParameter, nam
 
     A plain name goes through the project's output situation, which nests it under the outputs directory and
     versions it. An absolute path is the directory the user asked for, so it is used as given.
+
+    Stopgap: this belongs in the engine's ProjectDirectoryParameter, the way ProjectFileDestination already treats an
+    absolute filename. Remove this helper once the engine does it.
     """
     value = node.get_parameter_value(name)
     if isinstance(value, str) and value.strip():
