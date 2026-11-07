@@ -148,3 +148,15 @@ def test_the_view_and_wipe_position_are_synced_with_the_widget(node):
 def test_an_unknown_view_is_refused():
     with pytest.raises(ValueError, match="Unknown view"):
         tools.compare_view(picture(), picture(), "Sideways", 3.0, 50.0)
+
+
+def test_every_wipe_position_the_widget_can_send_is_accepted(node):
+    for tenth in range(1001):
+        node.set_parameter_value("wipe", round(tenth / 10, 1))
+    assert node.get_parameter_value("wipe") == 100.0
+
+
+@pytest.mark.parametrize("gain", [0.5, 2.3, 3.0, 7.7, 20.0])
+def test_the_gain_accepts_a_value_between_the_old_half_steps(node, gain):
+    node.set_parameter_value("gain", gain)
+    assert node.get_parameter_value("gain") == gain

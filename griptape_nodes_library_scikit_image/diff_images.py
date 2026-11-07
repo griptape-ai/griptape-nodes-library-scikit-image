@@ -86,7 +86,7 @@ class DiffImages(ImageNode):
                 "Where the Wipe view splits the images, as a percentage of the width. The first image is on the left.",
                 0.0,
                 100.0,
-                0.5,
+                0.1,  # the widget rounds the divider to a tenth, and the engine accepts only multiples of the step
                 slider=True,
             )
         )
@@ -97,7 +97,7 @@ class DiffImages(ImageNode):
                 "How bright to draw the differences. Raise it to see small ones.",
                 0.5,
                 20.0,
-                0.5,
+                0.1,
                 slider=True,
             )
         )
