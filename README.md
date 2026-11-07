@@ -4,7 +4,7 @@ Nodes for photos and scans of drawings, built on [scikit-image](https://scikit-i
 
 | Node | What it does |
 |---|---|
-| [Split Image](#split-image) | Cut a model sheet into one image per drawing, with a live preview. |
+| [Split Image](#split-image) | Cut a model sheet into one image per drawing, with a widget that shows the pieces and the settings. |
 | [Flatten Paper](#image-nodes) | Take shadows and gradients out of a photo or scan so the paper is white. |
 | [Lines to Alpha](#image-nodes) | The marks on the paper as an alpha channel: white on a mark, black on paper. |
 | [Trim to Content](#image-nodes) | Crop to the box that holds the marks. |
@@ -21,7 +21,7 @@ Split Image on a sheet of eleven dog poses. The preview outlines and numbers eac
 
 ## Quick start
 
-**Split a model sheet into poses.** Connect the photo to **Split Image**. The preview appears on the node, with each piece outlined, numbered and in its own colour, and dropped pieces hatched in red. Drag **Join distance** until each pose is one piece. Run the node to save the pieces in a folder such as `pieces_v001`.
+**Split a model sheet into poses.** Connect the photo to **Split Image**. The image appears on the node, with each piece outlined, numbered and in its own colour, and dropped pieces hatched in red. Drag **Join distance** until each pose is one piece, and click a piece to leave it out. Run the node to save the pieces in a folder such as `pieces_v001`.
 
 **Make a boiling-line animation.** Connect a drawing to **Boiling Lines**, and play the preview in the widget to tune the wobble. Run the node, then wire its `frames` into Create Video from Frames and play it at 6 to 12 frames per second.
 
@@ -37,11 +37,12 @@ Finds the marks on the paper, joins the marks that sit close together into one p
 | **Background** | `paper` keeps the paper around each piece. `transparent` clears everything outside the piece's shape. |
 | **Join distance** | Marks closer together than this, as a percentage of the image's longer side, count as one piece. Raise it if a pose comes apart, for example a tail or a hand drawn a little away from the body. Lower it if two poses merge. Default 0.6. |
 | **Padding** | Space to keep around each piece, as a percentage of the image's longer side. Default 1.5. |
+| **Min size** | Pieces whose longest side is shorter than this, as a percentage of the image's longer side, are dropped. This removes specks. The widget updates as you drag it. Default 3. |
 | **File prefix** | The start of each file name, as in Extract Frames: `pieces.0001.png`, `pieces.0002.png` and so on. Default `pieces`. |
 | **Number padding** | How many digits the piece number is zero-padded to. Default 4. |
 | **Output dir** | A versioned folder in the project's outputs, `pieces_v001`, `pieces_v002` and so on, with the pieces inside it. The gear button creates and connects a Directory Output Settings node to choose another place. |
-| **Advanced** | `sensitivity` is how different from the paper a mark must be to count, darker or lighter. Lower picks up fainter marks, such as light crayon, and also paper texture and shadows. Default 0.12. `min_size` drops pieces whose longest side is shorter than this, as a percentage of the image's longer side, which removes specks. Default 3. `ignore_corner_pieces` drops pieces that touch two edges of the image, such as a thumb holding the paper. A piece that touches only one edge is kept. |
-| **Preview** (out) | The image with each piece outlined in its own colour and numbered in reading order. With padding, a dashed box in the same colour shows the crop that is saved. Dropped pieces are outlined in red and cross-hatched. It updates when you change the image or a setting, without running the node. |
+| **Advanced** | `sensitivity` is how different from the paper a mark must be to count, darker or lighter. Lower picks up fainter marks, such as light crayon, and also paper texture and shadows. Default 0.12. `ignore_corner_pieces` drops pieces that touch two edges of the image, such as a thumb holding the paper. A piece that touches only one edge is kept. |
+| **Pieces** (widget) | The image with each piece outlined in its own colour and numbered in reading order. With padding, a dashed box in the same colour shows the crop that is saved. Dropped pieces are hatched in red. Click a piece to leave it out, and click it again to bring it back. It updates when you change the image or a setting, without running the node, and the dashed padding boxes follow the **Padding** slider as you drag it. |
 | **Pieces** (out) | The pieces as images, in reading order. |
 | **Sequence** (out) | The pieces as a sequence, to wire into Inspect Sequence or any other node that takes one. |
 | **Count** (out) | How many pieces were found. |
@@ -89,7 +90,7 @@ The preview is drawn in the browser, so dragging a slider is instant. It uses th
 
 ## Limits
 
-- **Touching drawings merge.** Split Image joins marks that sit close together, so two poses that touch, or whose shadows touch, come out as one piece. Lowering **Join distance** can separate them, but can also split a single pose. No one value works for every sheet, which is why the preview is there.
+- **Touching drawings merge.** Split Image joins marks that sit close together, so two poses that touch, or whose shadows touch, come out as one piece. Lowering **Join distance** can separate them, but can also split a single pose. No one value works for every sheet, which is why the widget is there.
 - **Align Images** handles turns of any angle and scale changes up to about 10%. A big turn together with a big scale change can fail.
 - **Make In-Betweens** follows motion, so it works when the two drawings are the same pose a little apart. A large change smears.
 - **Lines to SVG** traces each stroke as a filled shape and not as a centre line, so it is not a vector stroke you can restyle.
@@ -98,7 +99,7 @@ The preview is drawn in the browser, so dragging a slider is instant. It uses th
 ## Troubleshooting
 
 - **"No pieces were found"** or **"No marks were found".** Lower **Sensitivity**. For Split Image, also lower **Minimum size** or turn off **Ignore corner pieces** if a drawing sits in a corner.
-- **A pose is cut in two, or two poses are in one piece.** Change **Join distance** and watch the preview.
+- **A pose is cut in two, or two poses are in one piece.** Change **Join distance** and watch the outlines in the widget.
 - **Create Video from Frames fails with `width not divisible by 2`.** Leave **Even size** on, in Boiling Lines and Make In-Betweens.
 - **An error like `takes 3 positional arguments but 4 were given` after an update.** The engine still holds an older copy of one of the library's modules. Restart the engine completely, not just the library.
 - **The Boiling Lines preview says the browser would not let the widget read the image.** The widget reads the image's pixels in the browser, which needs the file server to allow it. The saved frames are not affected.

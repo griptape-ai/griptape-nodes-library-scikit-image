@@ -36,6 +36,11 @@ class Region:
     def center_y(self) -> float:
         return (self.top + self.bottom) / 2
 
+    @property
+    def box(self) -> list[int]:
+        """The box as [left, top, right, bottom], the form the widget sends and receives."""
+        return [self.left, self.top, self.right, self.bottom]
+
 
 @dataclass(frozen=True)
 class SplitSettings:
@@ -46,6 +51,42 @@ class SplitSettings:
     min_size: float
     padding: float
     ignore_corner_pieces: bool
+
+
+@dataclass(frozen=True)
+class Candidate:
+    """A blob of marks that may become a piece, before the size and corner settings are applied.
+
+    The sizes are the longest side as a percentage of the image's longer side, so they compare directly with the
+    'Minimum size' setting.
+    """
+
+    region: Region
+    blob_size: float  # the joined blob, which is bigger than the marks inside it
+    tight_size: float  # just the marks
+    edges: int  # how many edges of the image the marks touch
+
+
+def classify(
+    candidates: list[Candidate], min_size: float, ignore_corner_pieces: bool
+) -> tuple[list[Candidate], list[Candidate]]:
+    """Split candidates into the pieces to keep, in reading order, and the ones dropped for the settings.
+
+    A blob smaller than the minimum is skipped, like a speck. If only its marks are smaller, or it touches two edges
+    and corner pieces are ignored, it is dropped and shown as such. The widget's JavaScript (_boxes.js) does the same,
+    so the settings can change what is shown while a slider moves. Change one, and change the other.
+    """
+    kept: list[Candidate] = []
+    dropped: list[Candidate] = []
+    for candidate in candidates:
+        if candidate.blob_size < min_size:
+            continue
+        if candidate.tight_size < min_size or (ignore_corner_pieces and candidate.edges >= 2):
+            dropped.append(candidate)
+        else:
+            kept.append(candidate)
+    by_region = {candidate.region: candidate for candidate in kept}
+    return [by_region[region] for region in reading_order([candidate.region for candidate in kept])], dropped
 
 
 def validate_settings(settings: SplitSettings) -> list[str]:
@@ -90,6 +131,20 @@ def padded(region: Region, padding: int, width: int, height: int) -> Region:
         right=min(width, region.right + padding),
         bottom=min(height, region.bottom + padding),
     )
+
+
+def excluded_boxes(widget_value: object) -> set[tuple[int, ...]]:
+    """The boxes the user switched off in the widget. Anything malformed is ignored."""
+    if not isinstance(widget_value, dict):
+        return set()
+    boxes = set()
+    for box in widget_value.get("excluded") or []:
+        try:
+            left, top, right, bottom = (int(number) for number in box)
+        except (TypeError, ValueError):
+            continue
+        boxes.add((left, top, right, bottom))
+    return boxes
 
 
 def piece_file_name(prefix: str, number: int, digits: int) -> str:

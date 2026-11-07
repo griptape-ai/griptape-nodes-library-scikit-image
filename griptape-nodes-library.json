@@ -5,7 +5,7 @@
         "author": "Jason Schleifer",
         "description": "Split images such as model sheets into pieces, and clean up, separate, trace, compare and animate drawings with scikit-image.",
         "library_version": "0.1.0",
-        "engine_version": "0.104.0",
+        "engine_version": "0.107.0",
         "tags": [
             "Griptape",
             "Image",
@@ -21,6 +21,11 @@
         }
     },
     "widgets": [
+        {
+            "name": "SplitImage",
+            "path": "griptape_nodes_library_scikit_image/widgets/SplitImage/SplitImage.js",
+            "description": "The image with the pieces Split Image found outlined and numbered, with the settings as sliders. Click a piece to leave it out."
+        },
         {
             "name": "BoilingLines",
             "path": "griptape_nodes_library_scikit_image/widgets/BoilingLines/BoilingLines.js",

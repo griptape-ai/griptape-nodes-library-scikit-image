@@ -5,14 +5,17 @@ Every import of them is inside a function, so this module imports even where the
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from functools import partial
 from typing import Any
 
 from griptape_nodes_library_scikit_image.splitting import (
     BACKGROUND_TRANSPARENT,
+    Candidate,
     Region,
     SplitSettings,
+    classify,
     padded,
-    reading_order,
 )
 
 WORK_SIZE = 900
@@ -21,10 +24,6 @@ SMOOTHING = 2.0
 GOLDEN = 0.618034
 HUE_START = 0.08
 HUE_RANGE = 0.84
-DROPPED_COLOUR = (230, 40, 40)
-HATCH_COLOUR = (230, 40, 40, 190)
-DROPPED_TINT = (230, 40, 40, 45)
-LABEL_COLOUR = (0, 0, 0)
 SPECK_AREA = 30
 FIT_PASSES = 8
 FIT_SPREAD = 2.5
@@ -121,8 +120,15 @@ def find_pieces(image: Any, settings: SplitSettings) -> list[tuple[Region, Any]]
     return scan_pieces(image, settings)[0]
 
 
-def scan_pieces(image: Any, settings: SplitSettings) -> tuple[list[tuple[Region, Any]], list[Region]]:
-    """Find the pieces in a PIL image, and the candidates that were dropped, as boxes in the image's pixels."""
+def scan_candidates(
+    image: Any, sensitivity: float, join_distance: float, smallest: float
+) -> list[tuple[Candidate, Callable[[], Any]]]:
+    """Find the blobs of marks in a PIL image that may become pieces.
+
+    Only the sensitivity and join distance decide what the blobs are. Blobs under `smallest`, a percentage of the
+    image's longer side, are left out. Each comes with a function that makes its shape at working size, which is slow
+    enough to leave until the piece is kept.
+    """
     import numpy as np
     import PIL.Image
     from scipy import ndimage
@@ -135,23 +141,25 @@ def scan_pieces(image: Any, settings: SplitSettings) -> tuple[list[tuple[Region,
             (max(1, round(width * scale)), max(1, round(height * scale))), PIL.Image.Resampling.LANCZOS
         )
     )
-    marks = find_marks(small, settings.sensitivity)
+    marks = find_marks(small, sensitivity)
 
     longer = max(width, height)
-    join = round(settings.join_distance / 100 * longer * scale)
+    join = round(join_distance / 100 * longer * scale)
     dilated = ndimage.binary_dilation(marks, structure=morphology.disk(join)) if join else marks
     labels = measure.label(dilated)
-    smallest = settings.min_size / 100 * longer * scale
+    percent = 100 / (longer * scale)  # working pixels to a percentage of the longer side
     small_height, small_width = marks.shape
 
-    found: list[tuple[Region, Any]] = []
-    dropped: list[Region] = []
+    def shape_of(label: int, box: tuple[int, int, int, int]) -> Any:
+        return piece_shape(marks & (labels == label), box, join)
+
+    found: list[tuple[Candidate, Callable[[], Any]]] = []
     for prop in measure.regionprops(labels):
         top, left, bottom, right = prop.bbox
-        if max(right - left, bottom - top) < smallest:
+        blob_size = max(right - left, bottom - top) * percent
+        if blob_size < smallest:
             continue
-        inside = labels == prop.label
-        rows, columns = np.nonzero(marks & inside)
+        rows, columns = np.nonzero(marks & (labels == prop.label))
         if rows.size == 0:
             continue
         tight_top, tight_bottom = int(rows.min()), int(rows.max()) + 1
@@ -162,9 +170,6 @@ def scan_pieces(image: Any, settings: SplitSettings) -> tuple[list[tuple[Region,
             right=min(width, int(tight_right / scale) + 1),
             bottom=min(height, int(tight_bottom / scale) + 1),
         )
-        if max(tight_right - tight_left, tight_bottom - tight_top) < smallest:
-            dropped.append(region)
-            continue
         edges_touched = sum(
             (
                 tight_left <= EDGE_TOLERANCE,
@@ -173,14 +178,24 @@ def scan_pieces(image: Any, settings: SplitSettings) -> tuple[list[tuple[Region,
                 tight_bottom >= small_height - EDGE_TOLERANCE,
             )
         )
-        if settings.ignore_corner_pieces and edges_touched >= 2:
-            dropped.append(region)
-            continue
-        shape = piece_shape(marks & inside, (top, left, bottom, right), join)
-        found.append((region, shape))
-    ordered = reading_order([region for region, _ in found])
-    by_region = dict(found)
-    return [(region, by_region[region]) for region in ordered], dropped
+        candidate = Candidate(
+            region=region,
+            blob_size=blob_size,
+            tight_size=max(tight_right - tight_left, tight_bottom - tight_top) * percent,
+            edges=edges_touched,
+        )
+        found.append((candidate, partial(shape_of, prop.label, (top, left, bottom, right))))
+    return found
+
+
+def scan_pieces(image: Any, settings: SplitSettings) -> tuple[list[tuple[Region, Any]], list[Region]]:
+    """Find the pieces in a PIL image, and the candidates that were dropped, as boxes in the image's pixels."""
+    scanned = scan_candidates(image, settings.sensitivity, settings.join_distance, settings.min_size)
+    shapes = {candidate.region: shape for candidate, shape in scanned}
+    kept, dropped = classify([candidate for candidate, _ in scanned], settings.min_size, settings.ignore_corner_pieces)
+    return [(candidate.region, shapes[candidate.region]()) for candidate in kept], [
+        candidate.region for candidate in dropped
+    ]
 
 
 def piece_colour(index: int) -> tuple[int, int, int]:
@@ -192,82 +207,9 @@ def piece_colour(index: int) -> tuple[int, int, int]:
     return round(red * 255), round(green * 255), round(blue * 255)
 
 
-def dashed_rectangle(draw: Any, region: Region, colour: tuple[int, int, int], width: int, dash: int) -> None:
-    """Draw the outline of a box as dashes, with each gap as long as a dash."""
-    for left, top, right, bottom in (
-        (region.left, region.top, region.right, region.top),
-        (region.left, region.bottom, region.right, region.bottom),
-        (region.left, region.top, region.left, region.bottom),
-        (region.right, region.top, region.right, region.bottom),
-    ):
-        length = max(right - left, bottom - top)
-        for start in range(0, length, dash * 2):
-            end = min(start + dash, length)
-            if right > left:
-                draw.line((left + start, top, left + end, top), fill=colour, width=width)
-            else:
-                draw.line((left, top + start, left, top + end), fill=colour, width=width)
-
-
-def hatch_regions(
-    image: Any, regions: list[Region], step: int, width: int, keep_clear: list[Region] | None = None
-) -> Any:
-    """The image with red cross-hatching and a light red tint inside each region, so it is clear they are not used.
-
-    Anything in `keep_clear` is left as it is, even where it lies inside a region. A big dropped region, such as a whole
-    page edge, can have the pieces that are kept inside it, and those must not be hatched over.
-    """
-    import PIL.Image
-    import PIL.ImageDraw
-
-    size = image.size
-    lines = PIL.Image.new("RGBA", size, (0, 0, 0, 0))
-    drawing = PIL.ImageDraw.Draw(lines)
-    for offset in range(-size[1], size[0], step):
-        drawing.line((offset, 0, offset + size[1], size[1]), fill=HATCH_COLOUR, width=width)
-        drawing.line((offset + size[1], 0, offset, size[1]), fill=HATCH_COLOUR, width=width)
-    mask = PIL.Image.new("L", size, 0)
-    masking = PIL.ImageDraw.Draw(mask)
-    for region in regions:
-        masking.rectangle((region.left, region.top, region.right, region.bottom), fill=255)
-    for region in keep_clear or []:
-        masking.rectangle((region.left, region.top, region.right, region.bottom), fill=0)
-    covering = PIL.Image.alpha_composite(PIL.Image.new("RGBA", size, DROPPED_TINT), lines)
-    clear = PIL.Image.new("RGBA", size, (0, 0, 0, 0))
-    layer = PIL.Image.composite(covering, clear, mask)
-    return PIL.Image.alpha_composite(image.convert("RGBA"), layer).convert("RGB")
-
-
-def draw_preview(image: Any, kept: list[Region], dropped: list[Region], padding: int = 0) -> Any:
-    """The image with each piece outlined in its own colour and numbered in reading order, and the dropped candidates in red.
-
-    A dropped candidate is outlined in red and cross-hatched, so it is clear it will not be used.
-
-    The piece is a solid box. With padding, a dashed box in the same colour shows the crop that is saved.
-    """
-    import PIL.ImageDraw
-    import PIL.ImageFont
-
-    preview = image.convert("RGB")
-    longer = max(preview.size)
-    line = max(2, longer // 300)
-    crops = [padded(region, padding, *preview.size) for region in kept]
-    if dropped:
-        preview = hatch_regions(preview, dropped, step=max(10, line * 5), width=max(1, line // 2), keep_clear=crops)
-    draw = PIL.ImageDraw.Draw(preview)
-    font = PIL.ImageFont.load_default(size=max(14, longer // 40))
-    for region in dropped:
-        draw.rectangle((region.left, region.top, region.right, region.bottom), outline=DROPPED_COLOUR, width=line)
-    for index, (region, crop) in enumerate(zip(kept, crops, strict=True)):
-        colour = piece_colour(index)
-        if padding:
-            dashed_rectangle(draw, crop, colour, line, dash=max(6, line * 4))
-        draw.rectangle((region.left, region.top, region.right, region.bottom), outline=colour, width=line)
-        label = str(index + 1)
-        left, top, right, bottom = draw.textbbox((region.left + line, region.top + line), label, font=font)
-        draw.rectangle((left - 3, top - 3, right + 3, bottom + 3), fill=colour)
-        draw.text((region.left + line, region.top + line), label, fill=LABEL_COLOUR, font=font)
-    return preview
+def piece_colour_hex(index: int) -> str:
+    """The piece's colour as #rrggbb, for the widget."""
+    return "#{:02x}{:02x}{:02x}".format(*piece_colour(index))
 
 
 def cut_piece(image: Any, region: Region, shape: Any, settings: SplitSettings, background: str) -> Any:

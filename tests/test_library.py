@@ -198,7 +198,6 @@ def test_boiling_lines_hands_the_widget_a_url_the_size_of_the_image_and_its_sett
     assert len(published) == 1  # nothing changed, so nothing is sent again
 
 
-def test_the_widget_is_registered_in_the_library_json_and_its_file_exists():
-    widget = LIBRARY["widgets"][0]
-    assert widget["name"] == "BoilingLines"
+@pytest.mark.parametrize("widget", LIBRARY["widgets"], ids=lambda widget: widget["name"])
+def test_every_widget_is_registered_in_the_library_json_and_its_file_exists(widget):
     assert (Path(__file__).parent.parent / widget["path"]).is_file()

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import io
 import logging
 import pathlib
 from typing import Any
@@ -12,8 +11,8 @@ from griptape_nodes.common.sequences import MissingItemPolicy, Sequence
 from griptape_nodes.exe_types.core_types import NodeError, Parameter, ParameterGroup, ParameterMode
 from griptape_nodes.exe_types.node_types import AsyncResult, SuccessFailureNode
 from griptape_nodes.exe_types.param_components.project_directory_parameter import ProjectDirectoryParameter
-from griptape_nodes.exe_types.param_components.project_file_parameter import ProjectFileParameter
 from griptape_nodes.exe_types.param_types.parameter_bool import ParameterBool
+from griptape_nodes.exe_types.param_types.parameter_dict import ParameterDict
 from griptape_nodes.exe_types.param_types.parameter_float import ParameterFloat
 from griptape_nodes.exe_types.param_types.parameter_image import ParameterImage
 from griptape_nodes.exe_types.param_types.parameter_int import ParameterInt
@@ -22,7 +21,9 @@ from griptape_nodes.files.file import File
 from griptape_nodes.retained_mode.events.os_events import ScanSequencesRequest, ScanSequencesResultSuccess
 from griptape_nodes.retained_mode.griptape_nodes import GriptapeNodes
 from griptape_nodes.traits.options import Options
+from griptape_nodes.traits.widget import Widget
 
+from griptape_nodes_library_scikit_image.node_base import browser_url, image_location
 from griptape_nodes_library_scikit_image.params import build_output_directory
 from griptape_nodes_library_scikit_image.splitting import (
     BACKGROUND_CHOICES,
@@ -30,9 +31,11 @@ from griptape_nodes_library_scikit_image.splitting import (
     DEFAULT_PADDING_DIGITS,
     MAX_PIECES,
     PADDING_CHOICES,
-    Region,
     SplitSettings,
+    classify,
+    excluded_boxes,
     piece_file_name,
+    reading_order,
     validate_settings,
 )
 
@@ -45,17 +48,23 @@ DEFAULT_JOIN_DISTANCE = 0.6
 DEFAULT_MIN_SIZE = 3.0
 DEFAULT_PADDING = 1.5
 DEFAULT_PREFIX = "pieces"
-PREVIEW_PARAMETERS = {"image", "join_distance", "padding", "sensitivity", "min_size", "ignore_corner_pieces"}
+LIBRARY_NAME = "Griptape Nodes scikit-image Library"
+WIDGET_NAME = "SplitImage"
+EDITOR = "split_editor"
+# The settings that decide the boxes. The widget reads padding from them to draw the crop, and the editor merges their
+# live values into the widget's value while they are dragged.
+SYNCED_PARAMETERS = ["sensitivity", "join_distance", "min_size", "padding", "ignore_corner_pieces"]
+# The values the pieces are found from. The widget is redrawn when one of them changes.
+SCAN_PARAMETERS = {"image", *SYNCED_PARAMETERS}
+# The widget applies the size and corner settings itself, so it needs blobs smaller than the current minimum too. This is
+# the smallest the Minimum size slider goes, and at most this many of the biggest blobs are sent.
+WIDGET_FLOOR = 0.1
+WIDGET_MAX_CANDIDATES = 400
 
 
-def image_location(value: Any) -> str:
-    """The file or URL named by an image value: an artifact, the dict form of one, or plain text."""
-    if isinstance(value, dict):
-        return str(value.get("value", "") or "").strip()
-    if isinstance(value, str):
-        return value.strip()
-    location = getattr(value, "value", None)
-    return str(location).strip() if isinstance(location, str) else ""
+def default_widget_value() -> dict[str, Any]:
+    """The widget's own value: the image to draw, the candidates found on it, and the boxes the user switched off."""
+    return {"image_url": "", "width": 0, "height": 0, "candidates": [], "excluded": []}
 
 
 class SplitImage(SuccessFailureNode):
@@ -77,15 +86,18 @@ class SplitImage(SuccessFailureNode):
             )
         )
         self.add_parameter(
-            ParameterImage(
-                name="preview",
+            ParameterDict(
+                name=EDITOR,
+                default_value=default_widget_value(),
                 tooltip=(
                     "The image with each piece outlined in its own colour and numbered in reading order. With padding, a "
-                    "dashed box in the same colour shows the crop that is saved. Pieces that were dropped are outlined in "
-                    "red and cross-hatched. It updates when you change the image or a setting, without running the node."
+                    "dashed box in the same colour shows the crop that is saved. Pieces that were dropped are hatched in "
+                    "red. Click a piece to leave it out, and click it again to bring it back. It updates when you change "
+                    "the image or a setting, without running the node."
                 ),
-                allowed_modes={ParameterMode.OUTPUT},
-                ui_options={"display_name": "Preview", "expander": True},
+                allowed_modes={ParameterMode.PROPERTY},
+                traits={Widget(name=WIDGET_NAME, library=LIBRARY_NAME, synced_parameters=SYNCED_PARAMETERS)},
+                ui_options={"display_name": "Pieces"},
             )
         )
         self.add_parameter(
@@ -109,6 +121,8 @@ class SplitImage(SuccessFailureNode):
                 min_val=0.0,
                 max_val=20.0,
                 step=0.1,
+                slider=True,
+                soft_limits=True,
                 allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
             )
         )
@@ -120,6 +134,24 @@ class SplitImage(SuccessFailureNode):
                 min_val=0.0,
                 max_val=20.0,
                 step=0.1,
+                slider=True,
+                soft_limits=True,
+                allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
+            )
+        )
+        self.add_parameter(
+            ParameterFloat(
+                name="min_size",
+                default_value=DEFAULT_MIN_SIZE,
+                tooltip=(
+                    "Pieces whose longest side is shorter than this are dropped, as a percentage of the image's longer "
+                    "side. This removes specks."
+                ),
+                min_val=0.1,
+                max_val=100.0,
+                step=0.1,
+                slider=True,
+                soft_limits=True,
                 allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
             )
         )
@@ -153,18 +185,8 @@ class SplitImage(SuccessFailureNode):
                 min_val=0.01,
                 max_val=0.9,
                 step=0.01,
-                allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
-            )
-            ParameterFloat(
-                name="min_size",
-                default_value=DEFAULT_MIN_SIZE,
-                tooltip=(
-                    "Pieces whose longest side is shorter than this are dropped, as a percentage of the image's longer "
-                    "side. This removes specks."
-                ),
-                min_val=0.1,
-                max_val=100.0,
-                step=0.1,
+                slider=True,
+                soft_limits=True,
                 allowed_modes={ParameterMode.INPUT, ParameterMode.PROPERTY},
             )
             ParameterBool(
@@ -178,8 +200,6 @@ class SplitImage(SuccessFailureNode):
             )
         self.add_node_element(advanced)
 
-        self._preview_file = ProjectFileParameter(node=self, name="preview_file", default_filename="preview.jpg")
-        self._preview_file.add_parameter()
         self.add_parameter(
             Parameter(
                 name="pieces",
@@ -241,43 +261,84 @@ class SplitImage(SuccessFailureNode):
             ignore_corner_pieces=bool(self.get_parameter_value("ignore_corner_pieces")),
         )
 
+    def set_parameter_value(
+        self,
+        param_name: str,
+        value: Any,
+        *,
+        initial_setup: bool = False,
+        emit_change: bool = True,
+        skip_before_value_set: bool = False,
+    ) -> None:
+        """Keep the widget in step while a workflow loads.
+
+        Loading sets values with initial_setup, which skips after_value_set, so the saved image URL in the widget
+        would never be refreshed. The widget is worked out again whenever a value it is built from loads.
+        """
+        super().set_parameter_value(
+            param_name,
+            value,
+            initial_setup=initial_setup,
+            emit_change=emit_change,
+            skip_before_value_set=skip_before_value_set,
+        )
+        if initial_setup and param_name in SCAN_PARAMETERS:
+            self._update_widget()
+
     def after_value_set(self, parameter: Parameter, value: Any) -> None:
-        if parameter.name in PREVIEW_PARAMETERS:
-            self._refresh_preview()
+        if parameter.name in SCAN_PARAMETERS:
+            self._update_widget()
         return super().after_value_set(parameter, value)
 
-    def _refresh_preview(self) -> None:
-        """Redraw the preview from the current image and settings. Editing a setting must never fail, so this only logs."""
+    def _update_widget(self) -> None:
+        """Scan the current image and settings, and hand the widget the image and the boxes found on it.
+
+        Editing a setting must never fail, so this only logs. The boxes the user switched off stay as they are.
+        """
         try:
+            data = self._widget_value()
             location = image_location(self.get_parameter_value("image"))
             settings = self._settings()
-            if not location or validate_settings(settings):
-                self.parameter_output_values["preview"] = None
-                self.publish_update_to_parameter("preview", None)
-                return
-            from griptape_nodes_library_scikit_image import runner
+            data["candidates"] = []
+            kept: list[Any] = []
+            if not location:
+                data.update({"image_url": "", "width": 0, "height": 0})
+            else:
+                data["image_url"] = browser_url(self.get_parameter_value("image"))
+                image = self._load_image(location)
+                data["width"], data["height"] = image.size
+                if not validate_settings(settings):
+                    from griptape_nodes_library_scikit_image import runner
 
-            image = self._load_image(location)
-            found, dropped = runner.scan_pieces(image, settings)
-            self._save_preview(image, found, dropped, settings)
-            self.publish_update_to_parameter("preview", self.parameter_output_values["preview"])
-            self.publish_update_to_parameter("count", len(found))
+                    scanned = runner.scan_candidates(
+                        image, settings.sensitivity, settings.join_distance, min(settings.min_size, WIDGET_FLOOR)
+                    )
+                    biggest = sorted((candidate for candidate, _ in scanned), key=lambda c: -c.blob_size)
+                    by_region = {candidate.region: candidate for candidate in biggest[:WIDGET_MAX_CANDIDATES]}
+                    candidates = [by_region[region] for region in reading_order(list(by_region))]
+                    data["candidates"] = [
+                        {
+                            "box": candidate.region.box,
+                            "blob": candidate.blob_size,
+                            "tight": candidate.tight_size,
+                            "edges": candidate.edges,
+                            "colour": runner.piece_colour_hex(index),
+                        }
+                        for index, candidate in enumerate(candidates)
+                    ]
+                    kept, _ = classify(candidates, settings.min_size, settings.ignore_corner_pieces)
+            switched_off = excluded_boxes(data)
+            kept = [candidate for candidate in kept if tuple(candidate.region.box) not in switched_off]
+            self.parameter_output_values[EDITOR] = data
+            self.set_parameter_value(EDITOR, data)
+            self.publish_update_to_parameter(EDITOR, data)
+            self.publish_update_to_parameter("count", len(kept))
         except Exception as e:  # noqa: BLE001
-            logger.warning("%s: could not update the preview: %s", self.name, e)
+            logger.warning("%s: could not update the pieces: %s", self.name, e)
 
-    def _save_preview(
-        self, image: Any, found: list[tuple[Region, Any]], dropped: list[Region], settings: SplitSettings
-    ) -> None:
-        """Draw the preview, save it, and set it and the count as outputs."""
-        from griptape_nodes_library_scikit_image import runner
-
-        padding = round(settings.padding / 100 * max(image.size))
-        preview = runner.draw_preview(image, [region for region, _ in found], dropped, padding)
-        buffer = io.BytesIO()
-        preview.save(buffer, format="JPEG", quality=90)
-        saved = self._preview_file.build_file().write_bytes(buffer.getvalue())
-        self.parameter_output_values["preview"] = ImageUrlArtifact(value=saved.location)
-        self.parameter_output_values["count"] = len(found)
+    def _widget_value(self) -> dict[str, Any]:
+        current = self.get_parameter_value(EDITOR)
+        return {**default_widget_value(), **current} if isinstance(current, dict) else default_widget_value()
 
     def validate_before_node_run(self) -> list[Exception] | None:
         exceptions = list(super().validate_before_node_run() or [])
@@ -340,8 +401,12 @@ class SplitImage(SuccessFailureNode):
             raise NodeError(msg)
 
         image = self._load_image(location)
-        found, dropped = runner.scan_pieces(image, settings)
-        self._save_preview(image, found, dropped, settings)
+        scanned, _ = runner.scan_pieces(image, settings)
+        switched_off = excluded_boxes(self.get_parameter_value(EDITOR))
+        found = [(region, shape) for region, shape in scanned if tuple(region.box) not in switched_off]
+        if scanned and not found:
+            msg = "Every piece is switched off. Click a piece in 'Pieces' to bring it back."
+            raise NodeError(msg)
         if not found:
             msg = (
                 "No pieces were found. Lower 'Sensitivity' to pick up fainter marks, lower 'Minimum size', or turn off "
