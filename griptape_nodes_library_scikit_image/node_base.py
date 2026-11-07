@@ -55,6 +55,15 @@ def open_image(location: str, label: str) -> Any:
         raise NodeError(msg) from e
 
 
+def data_url(image: Any, image_format: str = "PNG") -> str:
+    """A PIL image as a data URL, for a widget that holds its pictures in its value. JPEG for photos, PNG for maps."""
+    import base64
+
+    buffer = io.BytesIO()
+    image.save(buffer, format=image_format, **({"quality": 90} if image_format == "JPEG" else {}))
+    return f"data:image/{image_format.lower()};base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+
+
 def browser_url(value: Any) -> str:
     """A URL the editor can load for an image value, or an empty string if there is none."""
     from griptape_nodes.retained_mode.events.static_file_events import (

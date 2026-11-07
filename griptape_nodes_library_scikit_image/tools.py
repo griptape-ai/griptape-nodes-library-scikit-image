@@ -283,6 +283,33 @@ def align_images(image: Any, reference: Any, mode: str = ALIGN_SHIFT) -> tuple[A
     return to_image(aligned), down, right, angle, factor
 
 
+def align_preview(image: Any, reference: Any, mode: str, longest: int) -> dict[str, Any]:
+    """Line an image up with a reference at a reduced size, for the widget, and show how much that helped.
+
+    Both are reduced so the reference's longer side is at most `longest`. Returns the reduced reference and aligned
+    image, the similarity and the map of differences before and after, and the shift, turn and scale. The shift is in
+    the pixels of the full-size reference, so it can be shown beside the saved result.
+    """
+    import PIL.Image
+
+    scale = min(1.0, longest / max(reference.size))
+    size = (max(1, round(reference.width * scale)), max(1, round(reference.height * scale)))
+    small_reference = to_image(rgb_array(reference.resize(size, PIL.Image.Resampling.LANCZOS)))
+    small_image = to_image(rgb_array(image.resize(size, PIL.Image.Resampling.LANCZOS)))
+    aligned, down, right, rotation, factor = align_images(small_image, small_reference, mode)
+    detail = max(size)
+    return {
+        "reference": small_reference,
+        "aligned": aligned,
+        "before": compare_preview(small_reference, small_image, detail),
+        "after": compare_preview(small_reference, aligned, detail),
+        "shift_down": down / scale,
+        "shift_right": right / scale,
+        "rotation": rotation,
+        "scale": factor,
+    }
+
+
 def dissimilarity(image: Any, other: Any, longest: int | None = None) -> tuple[float, Any]:
     """How alike two images are, 1 for the same, and where they differ as 1 minus the similarity at every pixel.
 

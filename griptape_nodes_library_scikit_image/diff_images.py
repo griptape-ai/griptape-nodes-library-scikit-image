@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import base64
-import io
 import logging
 from typing import Any
 
@@ -15,7 +13,7 @@ from griptape_nodes.traits.options import Options
 from griptape_nodes.traits.widget import Widget
 
 from griptape_nodes_library_scikit_image import tools
-from griptape_nodes_library_scikit_image.node_base import ImageNode, browser_url, image_location, open_image
+from griptape_nodes_library_scikit_image.node_base import ImageNode, browser_url, data_url, image_location, open_image
 from griptape_nodes_library_scikit_image.params import float_parameter, int_parameter
 from griptape_nodes_library_scikit_image.splitting import CompareView
 
@@ -207,9 +205,7 @@ class DiffImages(ImageNode):
                     score, difference = tools.compare_preview(
                         image, open_image(image_location(second), "Other"), max(MIN_PREVIEW_SIZE, size)
                     )
-                    buffer = io.BytesIO()
-                    difference.save(buffer, format="PNG")
-                    data["map_url"] = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode("ascii")
+                    data["map_url"] = data_url(difference)
                     data["score"] = score
             self.parameter_output_values[EDITOR] = data
             self.set_parameter_value(EDITOR, data)

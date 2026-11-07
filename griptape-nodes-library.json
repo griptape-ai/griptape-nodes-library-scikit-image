@@ -37,6 +37,11 @@
             "description": "Two images to wipe between, flip between, or see where they differ, with the gain applied live."
         },
         {
+            "name": "AlignImages",
+            "path": "griptape_nodes_library_scikit_image/widgets/AlignImages/AlignImages.js",
+            "description": "The aligned image against its reference: wipe, flip, and the differences before and after, with the shift, turn and scale found."
+        },
+        {
             "name": "BoilingLines",
             "path": "griptape_nodes_library_scikit_image/widgets/BoilingLines/BoilingLines.js",
             "description": "Live preview of the Boiling Lines wobble on your image, with a frame scrubber, a noise view and the settings."
